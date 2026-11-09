@@ -30,7 +30,7 @@ inline bool parseNumber(String s,uint32_t &out) {
 inline bool parse(const String &source,std::vector<Signal>&signals,String &error) {
  if(source.length()>32000){error="file_too_large";return false;}
  Signal current;bool active=false;int pos=0;
- auto flush=[&]()->bool {if(!active)return true;if(current.name.isEmpty()){error="missing_name";return false;}if(current.protocol=="RAW" && (current.timings.size()<2||current.timings.size()%2)){error="invalid_raw_timings";return false;}if(current.protocol!="RAW" && current.protocol!="NEC" && current.protocol!="SAMSUNG32" && current.protocol!="SIRC" && current.protocol!="SIRC15" && current.protocol!="NECEXT" && current.protocol!="KASEIKYO"){error="unsupported_protocol_"+current.protocol;return false;}signals.push_back(current);current=Signal();active=false;return signals.size()<=100;};
+ auto flush=[&]()->bool {if(!active)return true;if(current.name.isEmpty()){error="missing_name";return false;}if(current.protocol=="RAW" && (current.timings.size()<2||current.timings.size()%2)){error="invalid_raw_timings";return false;}if(current.protocol!="RAW" && current.protocol!="NEC" && current.protocol!="SAMSUNG32" && current.protocol!="SIRC" && current.protocol!="SIRC15" && current.protocol!="NECEXT" && current.protocol!="KASEIKYO" && current.protocol!="RC6"){error="unsupported_protocol_"+current.protocol;return false;}signals.push_back(current);current=Signal();active=false;return signals.size()<=100;};
  while(pos<source.length()){int end=source.indexOf('\n',pos);if(end<0)end=source.length();String line=source.substring(pos,end);pos=end+1;line.trim();if(!line.length()||line.startsWith("#")||line.startsWith("Filetype:")||line.startsWith("Version:"))continue;
  if(line=="#"){continue;}int colon=line.indexOf(':');if(colon<0)continue;String key=line.substring(0,colon),val=line.substring(colon+1);key.trim();val.trim();
  if(key=="name"){if(!flush())return false;active=true;current.name=val;}
@@ -46,6 +46,8 @@ inline bool parse(const String &source,std::vector<Signal>&signals,String &error
 inline bool send(const Signal &s,String &error) {
  if(s.protocol=="NEC"){if(s.address>65535||s.command>255){error="nec_values_out_of_range";return false;}IrSender.sendNEC((uint16_t)s.address,(uint8_t)s.command,0);return true;}
  if(s.protocol=="SAMSUNG32"){if(s.address>65535||s.command>255){error="samsung_values_out_of_range";return false;}IrSender.sendSamsung((uint16_t)s.address,(uint8_t)s.command,0);return true;}
+ if(s.protocol=="NECEXT"){if(s.address>65535||s.command>65535){error="necext_values_out_of_range";return false;}IrSender.sendOnkyo((uint16_t)s.address,(uint16_t)s.command,0);return true;}
+ if(s.protocol=="RC6"){if(s.address>255||s.command>255){error="rc6_values_out_of_range";return false;}IrSender.sendRC6((uint8_t)s.address,(uint8_t)s.command,0);return true;}
  if(s.protocol=="RAW"){if(s.timings.empty()){error="empty_raw";return false;}IrSender.sendRaw(s.timings.data(),s.timings.size(),(uint_fast8_t)(s.frequency/1000));return true;}
  error="unsupported_protocol";return false;
 }
