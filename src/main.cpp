@@ -8,6 +8,7 @@
 #include <BLEScan.h>
 #include <IRremote.hpp>
 #include <LittleFS.h>
+#include "skb_ir_library.h"
 
 static WebServer server(80);
 static constexpr uint8_t IR_PIN = 19;
@@ -265,6 +266,32 @@ void uploadLogo() {
     if (upload.status==UPLOAD_FILE_ABORTED || upload.totalSize>150000) LittleFS.remove("/logo.png");
   }
 }
+
+void listIRLibrary() {
+ JsonDocument doc;doc["ok"]=filesystemReady;JsonArray files=doc["files"].to<JsonArray>();
+ if(filesystemReady){File root=LittleFS.open("/ir");if(root){File file=root.openNextFile();while(file){if(!file.isDirectory()&&String(file.name()).endsWith(".ir")){JsonObject item=files.add<JsonObject>();item["name"]=String(file.name());item["bytes"]=file.size();}file=root.openNextFile();}}}
+ String output;serializeJson(doc,output);server.send(filesystemReady?200:503,"application/json",output);
+}
+void importIRFile() {
+ if(!filesystemReady){server.send(503,"application/json","{\"ok\":false,\"error\":\"storage_unavailable\"}");return;}
+ String name=server.arg("name");if(name.length()<1||name.length()>55||!name.endsWith(".ir")){server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_name\"}");return;}
+ for(size_t i=0;i<name.length();i++){char c=name[i];if(!isalnum((unsigned char)c)&&c!='_'&&c!='-'&&c!='.'){server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_name\"}");return;}}
+ String body=server.arg("plain");std::vector<SKBIR::Signal> signals;String error;
+ if(!SKBIR::parse(body,signals,error)){JsonDocument doc;doc["ok"]=false;doc["error"]=error;String out;serializeJson(doc,out);server.send(422,"application/json",out);return;}
+ LittleFS.mkdir("/ir");File file=LittleFS.open("/ir/"+name,"w");if(!file){server.send(507,"application/json","{\"ok\":false,\"error\":\"storage_full\"}");return;}
+ size_t written=file.print(body);file.close();JsonDocument doc;doc["ok"]=written==body.length();doc["signals"]=signals.size();String out;serializeJson(doc,out);server.send(written==body.length()?201:507,"application/json",out);
+}
+void sendStoredIR() {
+ JsonDocument request;if(deserializeJson(request,server.arg("plain"))){server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_json\"}");return;}
+ String name=request["file"] | "";String key=request["key"] | "";if(name.isEmpty()||name.indexOf('/')>=0||name.indexOf('\\')>=0||name.indexOf("..")>=0||!name.endsWith(".ir")){server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_file\"}");return;}
+ File file=LittleFS.open("/ir/"+name,"r");if(!file){server.send(404,"application/json","{\"ok\":false,\"error\":\"not_found\"}");return;}
+ if(file.size()>32000){file.close();server.send(413,"application/json","{\"ok\":false,\"error\":\"too_large\"}");return;}
+ String body=file.readString();file.close();std::vector<SKBIR::Signal> signals;String error;
+ if(!SKBIR::parse(body,signals,error)){server.send(422,"application/json","{\"ok\":false,\"error\":\"invalid_ir_file\"}");return;}
+ for(auto &signal:signals){if(signal.name==key){bool ok=SKBIR::send(signal,error);JsonDocument doc;doc["ok"]=ok;if(!ok)doc["error"]=error;String out;serializeJson(doc,out);server.send(ok?200:422,"application/json",out);return;}}
+ server.send(404,"application/json","{\"ok\":false,\"error\":\"key_not_found\"}");
+}
+
 void setup() {
   Serial.begin(115200);
   auto cfg = M5.config();
@@ -290,6 +317,9 @@ void setup() {
   bleScanner->setActiveScan(false);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
+  server.on("/api/ir/library", HTTP_GET, listIRLibrary);
+  server.on("/api/ir/import", HTTP_POST, importIRFile);
+  server.on("/api/ir/send", HTTP_POST, sendStoredIR);
   server.on("/api/logo", HTTP_POST, [](){server.send(filesystemReady?200:503,"application/json",filesystemReady?"{\"ok\":true}":"{\"ok\":false}");}, uploadLogo);
   server.on("/api/ble/scan", HTTP_GET, scanBle);
   server.on("/api/ble/tracking", HTTP_GET, bleTrackingSettings);
@@ -304,23 +334,19 @@ void setup() {
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SKB MULTITOOL PRO</title>
 <style>
-:root{color-scheme:dark;--ink:#080c12;--panel:#121a24;--line:#30475a;--blue:#50d4ff;--silver:#d7e0e9}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:#edf4fa;background:radial-gradient(ellipse at 75% -12%,#173e59 0%,transparent 48%),linear-gradient(180deg,#080d13,#06080d);font:14px/1.55 system-ui,-apple-system,Arial}
-main{max-width:620px;margin:auto;padding:16px 15px 40px}.hero,.panel{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(34,47,63,.94),rgba(11,17,25,.98));border:1px solid var(--line);border-radius:18px;padding:18px;margin:0 0 14px;box-shadow:0 12px 28px #0005,inset 0 1px #ffffff12}
-.hero{padding:28px 18px;text-align:center;border-color:#4b647a;background:radial-gradient(circle at 50% 0%,#28465b 0%,#111924 62%,#0b111a 100%)}
-.hero:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,#7fe5ff,transparent)}
-.hero img{width:130px;height:130px;object-fit:contain;filter:drop-shadow(0 9px 14px #0009);border-radius:15px}
-h1{font-size:24px;font-weight:900;letter-spacing:1.3px;margin:13px 0 3px;color:#f3f7fc}h2{font-size:17px;letter-spacing:.2px;margin:4px 0 10px}p{margin:8px 0 13px}
-small,.muted{color:#a0b5c8}.tag{color:var(--blue);font-size:10px;letter-spacing:2px;font-weight:800;text-transform:uppercase}
-button{appearance:none;background:linear-gradient(180deg,#205570,#123346);border:1px solid #49bce7;border-radius:11px;color:#effbff;font-weight:800;padding:12px 15px;cursor:pointer;min-height:44px;box-shadow:inset 0 1px #ffffff1e,0 3px 12px #0004}
-button:active{transform:translateY(1px);filter:brightness(1.2)}button:focus-visible,input:focus-visible{outline:2px solid #a4eeff;outline-offset:2px}
-input[type=number],input[type=text],input:not([type]){width:100%;padding:12px;margin:5px 0 10px;background:#08131f;color:#f3f8ff;border:1px solid #3d6078;border-radius:10px;font:inherit}
-input[type=file]{display:block;width:100%;margin:10px 0;color:#b8cddd;font-size:12px}input[type=checkbox]{accent-color:#56cfff;width:18px;height:18px;vertical-align:middle}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid .panel{margin:0 0 14px}.grid button{width:100%}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#a9e5fa;background:#070e17;border:1px solid #243a4c;border-radius:11px;padding:12px;max-height:320px;overflow:auto}
-a{color:#7bdcff}.nav{display:flex;gap:8px;overflow:auto;padding:0 0 14px}.nav a{flex:none;text-decoration:none;border:1px solid #38576e;background:#12212e;border-radius:99px;color:#bfe8fa;padding:8px 12px;font-size:12px;font-weight:800}
-.status-dot{display:inline-block;width:7px;height:7px;background:#52dba5;border-radius:50%;box-shadow:0 0 12px #52dba5;margin-right:5px}
-@media(max-width:360px){main{padding:10px}.grid{grid-template-columns:1fr}.hero img{width:110px;height:110px}}
+:root{color-scheme:dark;--ink:#090909;--panel:#171717;--line:#4d3636;--blue:#bb3434;--silver:#ded8d5}
+*{box-sizing:border-box}body{margin:0;color:#eee8e5;background:repeating-linear-gradient(115deg,#0b0b0c 0px,#101011 3px,#0b0b0c 6px);font:14px/1.5 system-ui,Arial}
+main{max-width:640px;margin:auto;padding:12px 12px 90px}.hero,.panel{background:linear-gradient(150deg,#292929,#111112 62%,#090909);border:1px solid #534747;border-radius:9px;padding:15px;margin-bottom:12px;box-shadow:inset 0 1px #ffffff20,0 6px 18px #0009}
+.hero{text-align:center;border-top:2px solid #9d3030}.hero img{width:115px;height:115px;object-fit:contain}.hero:after{content:"SECURE HARDWARE SOLUTIONS  •  MADE BY CHRIS NASH";display:block;color:#bdb4b4;font-size:10px;letter-spacing:1.2px;margin-top:8px}
+h1{font-size:23px;letter-spacing:1px;margin:10px 0}h2{font-size:17px;margin:3px 0 12px}small,.muted{color:#ada6a6}.tag{color:#d44b4b;font-size:11px;letter-spacing:1.5px;font-weight:800}
+button{background:linear-gradient(#444,#222 48%,#111);color:#f1eeee;border:1px solid #746666;border-bottom:2px solid #8e2929;border-radius:7px;padding:12px;min-height:44px;font-weight:750;box-shadow:inset 0 1px #ffffff2c;cursor:pointer}
+button:active{background:#572222}button:focus-visible,input:focus-visible{outline:2px solid #d24c4c;outline-offset:2px}
+input{max-width:100%;padding:10px;background:#0b0b0c;color:white;border:1px solid #675050;border-radius:5px}input[type=number],input[type=text],input:not([type]){width:100%;margin:5px 0 10px}input[type=file]{display:block;width:100%;margin:10px 0}input[type=checkbox]{accent-color:#b63232}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid .panel{margin:0 0 10px}.grid button{width:100%}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080809;border:1px solid #483535;border-radius:5px;color:#d7c5c5;padding:12px;max-height:320px;overflow:auto;font:12px/1.6 monospace}
+a{color:#e46d6d}.nav{display:flex;gap:7px;overflow:auto;padding:0 0 14px}.nav a{flex:none;text-decoration:none;background:linear-gradient(#292929,#111);border:1px solid #594444;border-bottom:2px solid #a12c2c;color:#eee;padding:9px;border-radius:5px;font-size:12px;font-weight:700}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#6aa876;margin-right:5px}
+@media(max-width:360px){.grid{grid-template-columns:1fr}}
 </style><main>
 <header class="hero"><img id="skb-emblem" src="data:image/jpeg;base64,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" alt="Original stitched SKB emblem">
 <h1>SKB MULTITOOL PRO</h1><div><label class="muted">Customise emblem · stitched SKB PNG (max 150 KB) <input id="logo-file" type="file" accept="image/png"></label><button onclick="uploadBrandLogo()">Apply logo</button><small id="logo-result"></small></div><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 / Mobile command centre</p></header>
