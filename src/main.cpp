@@ -37,6 +37,8 @@ static const char* apName = "SKB-MULTITOOL-PRO";
 static String input;
 static bool wifiScanning = false;
 static unsigned long scanStarted = 0;
+static String cachedWifiJson = "{\"ok\":true,\"state\":\"idle\",\"networks\":[]}";
+static String cachedSignalJson = "{\"ok\":true,\"source\":\"last_wifi_scan\",\"live\":false,\"signals\":[]}";
 
 void startWifiScan() {
   if (wifiScanning) { server.send(409, "application/json", "{\"ok\":false,\"error\":\"scan_running\"}"); return; }
@@ -68,10 +70,25 @@ void wifiResults() {
       ap["channel"] = WiFi.channel(i);
       ap["encryption"] = static_cast<int>(WiFi.encryptionType(i));
     }
+    JsonDocument signalDoc;
+    signalDoc["ok"] = true;
+    signalDoc["source"] = "last_wifi_scan";
+    signalDoc["live"] = false;
+    JsonArray signalArray = signalDoc["signals"].to<JsonArray>();
+    for (int i=0; i<n && i<64; ++i) {
+      JsonObject entry = signalArray.add<JsonObject>();
+      entry["ssid"] = WiFi.SSID(i);
+      entry["bssid"] = WiFi.BSSIDstr(i);
+      entry["rssi"] = WiFi.RSSI(i);
+      entry["channel"] = WiFi.channel(i);
+    }
+    serializeJson(signalDoc,cachedSignalJson = String());
     WiFi.scanDelete();
   }
   doc["ok"] = true;
-  String json; serializeJson(doc,json); server.send(200,"application/json",json);
+  String json; serializeJson(doc,json);
+  if (n >= 0) cachedWifiJson = json;
+  server.send(200,"application/json",json);
 }
 
 
@@ -118,7 +135,8 @@ void setup() {
   M5.begin(cfg);
   skbPrefs.begin("skb-settings",false);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
-  // Headless-first: no screen interaction required.\n  M5.Display.setRotation(0);
+  // Headless-first: no screen interaction required.
+  M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
   M5.Display.setTextSize(2);
@@ -133,25 +151,7 @@ void setup() {
   server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
   server.on("/api/wifi/results", HTTP_GET, wifiResults);
-  server.on("/api/signal/wifi", HTTP_GET, []() {
-    JsonDocument doc;
-    doc["ok"] = true;
-    doc["source"] = "last_wifi_scan";
-    doc["live"] = false;
-    JsonArray signals = doc["signals"].to<JsonArray>();
-    int n = WiFi.scanComplete();
-    if (n >= 0) {
-      for (int i=0; i<n && i<64; ++i) {
-        JsonObject entry = signals.add<JsonObject>();
-        entry["ssid"] = WiFi.SSID(i);
-        entry["bssid"] = WiFi.BSSIDstr(i);
-        entry["rssi"] = WiFi.RSSI(i);
-        entry["channel"] = WiFi.channel(i);
-      }
-    }
-    String json; serializeJson(doc,json);
-    server.send(200,"application/json",json);
-  });
+  server.on("/api/signal/wifi", HTTP_GET, []() { server.send(200,"application/json",cachedSignalJson); });
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
