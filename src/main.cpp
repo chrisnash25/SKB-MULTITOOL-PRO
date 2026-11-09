@@ -133,6 +133,25 @@ void setup() {
   server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
   server.on("/api/wifi/results", HTTP_GET, wifiResults);
+  server.on("/api/signal/wifi", HTTP_GET, []() {
+    JsonDocument doc;
+    doc["ok"] = true;
+    doc["source"] = "last_wifi_scan";
+    doc["live"] = false;
+    JsonArray signals = doc["signals"].to<JsonArray>();
+    int n = WiFi.scanComplete();
+    if (n >= 0) {
+      for (int i=0; i<n && i<64; ++i) {
+        JsonObject entry = signals.add<JsonObject>();
+        entry["ssid"] = WiFi.SSID(i);
+        entry["bssid"] = WiFi.BSSIDstr(i);
+        entry["rssi"] = WiFi.RSSI(i);
+        entry["channel"] = WiFi.channel(i);
+      }
+    }
+    String json; serializeJson(doc,json);
+    server.send(200,"application/json",json);
+  });
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -153,12 +172,14 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">Firmware integration pending</p><button disabled>Discover</button></section></div>
 <section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">Anti-tracking mode configuration. Detection and alerts are not yet available.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
+<section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
 async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
+async function signalWifi(){try{const d=await (await fetch('/api/signal/wifi')).json();document.getElementById('signal-wifi').textContent=(d.signals||[]).map(n=>n.ssid+' ('+n.bssid+') '+n.rssi+' dBm').join('\\n')||'Run a Wi-Fi scan first'}catch(e){document.getElementById('signal-wifi').textContent=String(e)}}
 async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?'Enabled in settings — scanner integration pending':'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 async function setPathShield(enabled){try{await fetch('/api/pathshield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});pathShieldStatus()}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 statusNow();pathShieldStatus();setInterval(statusNow,5000);
