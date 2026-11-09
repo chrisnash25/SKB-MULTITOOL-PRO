@@ -50,7 +50,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <section class="page" data-title="SETTINGS"><h2>Settings and imports</h2>
 <div class="panel"><h3>PATHSHIELD</h3><p class="muted">Classifies BLE candidates for manual review. Not proof of unwanted tracking.</p><div class="grid"><button id="pathOn">ENABLE</button><button id="pathOff">DISABLE</button></div><button id="pathGet">REFRESH</button><pre id="pathState">Not checked.</pre></div>
 <div class="panel"><h3>IMPORT FLIPPER .IR FILE</h3><label for="irName">Filename (letters, digits, underscores, dash)</label><input id="irName" value="CustomRemote.ir"><label for="irText">Flipper IR file text</label><textarea id="irText" placeholder="Filetype: IR signals file&#10;Version: 1&#10;..."></textarea><button id="importIr" class="red">IMPORT TO M5STICK</button><pre id="importState">No file uploaded.</pre></div>
-<div class="panel"><h3>USB DIAGNOSTICS</h3><button id="ping">USB HANDSHAKE</button><pre id="diagnostics">Ready</pre></div>
+<div class="panel"><h3>USB DIAGNOSTICS</h3><button id="ping">USB HANDSHAKE</button><button id="usbDevices">SHOW ANDROID USB DEVICES</button><p class="muted">Long-press CONNECT USB at the top to view detected hardware. CH9102F is normally 1A86:55D4.</p><pre id="diagnostics">Ready</pre></div>
 </section></main>
 <footer class="pager"><button id="prev">◀ PREV</button><span id="pageLabel">HOME · 1 / 6</span><button id="next">NEXT ▶</button></footer>
 <script>
@@ -77,6 +77,8 @@ function rpc(cmd,args={}){return new Promise((resolve,reject)=>{const id=serial+
 async function run(id,cmd,args){setText(id,'Working...');try{const result=await rpc(cmd,args||{});setText(id,result);return result;}catch(e){setText(id,'Error: '+uiError(e));return null;}}
 $('hello').onclick=()=>run('status','usb_hello');$('getStatus').onclick=()=>run('status','usb_status');
 $('ping').onclick=()=>run('diagnostics','usb_hello');
+$('usbDevices').onclick=()=>setText('diagnostics',window.SKB ? SKB.listDevices() : 'Android USB bridge unavailable');
+window.skbUsbDiagnostics=text=>setText('diagnostics',text);
 const monitor=[
 ['AORUS FV43U','Monitor_Aorus_FV43U.ir'],
 ['BenQ EX2780Q','Monitor_BenQ_EX2780Q.ir'],
