@@ -21,9 +21,9 @@ void sendPathShieldStatus() {
   JsonDocument doc;
   doc["ok"] = true;
   doc["enabled"] = pathShieldEnabled;
-  doc["scanner_ready"] = false;
-  doc["mode"] = "configuration_only";
-  doc["note"] = "BLE persistence detection and alerts are not yet integrated";
+  doc["scanner_ready"] = (bleScanner != nullptr);
+  doc["mode"] = "ble_candidate_classification";
+  doc["note"] = "BLE candidate classification is available; persistence scoring and alerts remain pending";
   String json; serializeJson(doc, json);
   server.send(200, "application/json", json);
 }
@@ -124,6 +124,25 @@ void scanBle() {
     if (device.haveName()) item["name"] = String(device.getName().c_str());
     if (device.haveManufacturerData()) item["manufacturer_data_bytes"] = device.getManufacturerData().length();
     if (device.haveServiceUUID()) item["service_uuid"] = String(device.getServiceUUID().toString().c_str());
+    if (pathShieldEnabled) {
+      String candidate = "";
+      if (device.haveManufacturerData()) {
+        std::string md = device.getManufacturerData();
+        if (md.length() >= 3) {
+          uint16_t company = (uint8_t)md[0] | ((uint16_t)(uint8_t)md[1] << 8);
+          if (company == 0x004C && md.length() >= 27 && ((uint8_t)md[2] == 0x12 || (uint8_t)md[2] == 0x07)) candidate = "Find My-compatible candidate";
+          else if (company == 0x0075) candidate = "Samsung manufacturer (tracker unconfirmed)";
+          else if (company == 0x0133) candidate = "Chipolo manufacturer candidate";
+        }
+      }
+      if (device.haveServiceUUID()) {
+        String uuid = String(device.getServiceUUID().toString().c_str());
+        uuid.toLowerCase();
+        if (uuid.indexOf("fd51") >= 0 || uuid.indexOf("fd52") >= 0) candidate = "Tile-compatible service candidate";
+        else if (uuid.indexOf("fd6f") >= 0) candidate = "SmartThings-compatible service candidate";
+      }
+      if (candidate.length()) item["tracker_candidate"] = candidate;
+    }
   }
   trackedBleSeen = foundTracked;
   JsonObject tracking = doc["tracking"].to<JsonObject>();
@@ -252,7 +271,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
-<section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">Anti-tracking mode configuration. Detection and alerts are not yet available.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
+<section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification during discovery. Persistence scoring and alerts are pending.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
