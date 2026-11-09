@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#include <BLEAdvertising.h>
 #include <IRremote.hpp>
 #include <LittleFS.h>
 #include "skb_ir_library.h"
@@ -16,6 +17,8 @@ static bool filesystemReady = false;
 static File logoUploadFile;
 static Preferences skbPrefs;
 static BLEScan* bleScanner = nullptr;
+static BLEAdvertising* bleAdvertiser = nullptr;
+static bool bleAdvertisingEnabled = false;
 static String trackedBleAddress;
 static bool trackedBleSeen = false;
 static int trackedBleRssi = -127;
@@ -24,6 +27,29 @@ static bool pathShieldEnabled = false;
 static unsigned int trackerCandidatesLastScan = 0;
 static String trackerAlert = "No BLE scan yet";
 static unsigned long pathShieldEnabledSince = 0;
+
+
+void bleAdvertisementControl() {
+ if(server.method()==HTTP_POST) {
+  JsonDocument request;
+  if(deserializeJson(request,server.arg("plain")) || !request["enabled"].is<bool>()) {server.send(400,"application/json",R"({"ok":false,"error":"enabled_boolean_required"})");return;}
+  if(!bleAdvertiser){server.send(503,"application/json",R"({"ok":false,"error":"ble_advertiser_unavailable"})");return;}
+  bool enabled=request["enabled"].as<bool>();
+  if(enabled) bleAdvertiser->start();
+  else bleAdvertiser->stop();
+  bleAdvertisingEnabled=enabled;
+ }
+ JsonDocument result;result["ok"]=true;result["enabled"]=bleAdvertisingEnabled;result["name"]="SKB-MULTITOOL-PRO";result["mode"]="device_discovery";result["note"]="Advertises SKB device identity only";String output;serializeJson(result,output);server.send(200,"application/json",output);
+}
+void preloadIRRemotes() {
+ if(!filesystemReady)return;
+ LittleFS.mkdir("/ir");
+ // Presets are derived from Flipper-IRDB Samsung/Samsung.ir and LG/LG.ir power entries.
+ const char* samsung="Filetype: IR signals file\nVersion: 1\nname: Power\ntype: parsed\nprotocol: SAMSUNG32\naddress: 0x07\ncommand: 0x02\n";
+ const char* lg="Filetype: IR signals file\nVersion: 1\nname: Power\ntype: parsed\nprotocol: NEC\naddress: 0x04\ncommand: 0x08\n";
+ if(!LittleFS.exists("/ir/Samsung_TV_Power.ir")){File file=LittleFS.open("/ir/Samsung_TV_Power.ir","w");if(file){file.print(samsung);file.close();}}
+ if(!LittleFS.exists("/ir/LG_TV_Power.ir")){File file=LittleFS.open("/ir/LG_TV_Power.ir","w");if(file){file.print(lg);file.close();}}
+}
 
 void sendPathShieldStatus() {
   JsonDocument doc;
@@ -326,6 +352,7 @@ void setup() {
   M5.begin(cfg);
   skbPrefs.begin("skb-settings",false);
   filesystemReady=LittleFS.begin(true);
+  preloadIRRemotes();
   IrSender.begin(IR_PIN);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   trackedBleAddress=skbPrefs.getString("ble_target","");
@@ -343,6 +370,8 @@ void setup() {
   BLEDevice::init("SKB-MULTITOOL-PRO");
   bleScanner = BLEDevice::getScan();
   bleScanner->setActiveScan(false);
+  bleAdvertiser=BLEDevice::getAdvertising();
+  bleAdvertiser->setScanResponse(true);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
   server.on("/api/ir/tv-power", HTTP_POST, sendTVPower);
@@ -352,6 +381,8 @@ void setup() {
   server.on("/api/ir/send", HTTP_POST, sendStoredIR);
   server.on("/api/logo", HTTP_POST, [](){server.send(filesystemReady?200:503,"application/json",filesystemReady?"{\"ok\":true}":"{\"ok\":false}");}, uploadLogo);
   server.on("/api/ble/scan", HTTP_GET, scanBle);
+  server.on("/api/ble/advertise", HTTP_GET, bleAdvertisementControl);
+  server.on("/api/ble/advertise", HTTP_POST, bleAdvertisementControl);
   server.on("/api/ble/tracking", HTTP_GET, bleTrackingSettings);
   server.on("/api/ble/tracking", HTTP_POST, bleTrackingSettings);
   server.on("/api/pathshield", HTTP_GET, sendPathShieldStatus);
@@ -391,7 +422,16 @@ catch(e){status.textContent='Connection failed: '+e.message;}
 <header class="hero"><img id="skb-emblem" src="data:image/jpeg;base64,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" alt="Original stitched SKB emblem">
 <h1>SKB MULTITOOL PRO</h1><div><label class="muted">Customise emblem · stitched SKB PNG (max 150 KB) <input id="logo-file" type="file" accept="image/png"></label><button onclick="uploadBrandLogo()">Apply logo</button><small id="logo-result"></small></div><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 / Mobile command centre</p></header>
 <nav class="nav"><a href="#device">System</a><a href="#infrared">Infrared</a><a href="#bluetooth">Bluetooth</a><a href="#privacy">PathShield</a><a href="#wifi">Wi-Fi</a></nav><section id="device" class="panel"><div class="tag"><span class="status-dot"></span>DEVICE / STATUS</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
-<section id="infrared" class="panel"><div class="tag">INFRARED / TX</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
+<section class="panel" id="ble-advertising"><div class="tag">BLUETOOTH / TX</div><h2>SKB BLE Beacon</h2><p class="muted">Broadcast your own SKB-MULTITOOL-PRO identity. No impersonation or repeated packet flooding.</p><button type="button" onclick="setBleAdvertise(true)">Start advertising</button> <button type="button" onclick="setBleAdvertise(false)">Stop advertising</button><pre id="ble-advertise-status">Checking status...</pre></section>
+<section class="panel" id="ir-presets"><div class="tag">IR LIBRARY</div><h2>Preloaded TV Remotes</h2><p class="muted">Verified Samsung and LG power-toggle commands. Select a file and tap a command. Additional compatible .ir files can be imported.</p><select id="ir-preset-file" style="width:100%;padding:10px;background:#111;color:#eee"></select><button type="button" onclick="loadIRKeys()">Load buttons</button><div id="ir-preset-buttons" class="grid"></div><pre id="ir-preset-status">Loading library...</pre><label>Import a compatible Flipper .ir file (up to 32 KB)<input type="file" id="ir-import-file" accept=".ir,text/plain"></label><button type="button" onclick="importIRFileUI()">Import file</button></section>
+<script>
+async function setBleAdvertise(enabled){const el=document.getElementById('ble-advertise-status');try{const r=await fetch('/api/ble/advertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});el.textContent=JSON.stringify(await r.json(),null,2)}catch(e){el.textContent=String(e)}}
+async function bleAdvertiseStatus(){try{document.getElementById('ble-advertise-status').textContent=JSON.stringify(await (await fetch('/api/ble/advertise')).json(),null,2)}catch(e){}}
+async function refreshIRFiles(){const select=document.getElementById('ir-preset-file');const out=document.getElementById('ir-preset-status');try{const r=await fetch('/api/ir/library');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));select.replaceChildren();for(const f of d.files||[]){const opt=document.createElement('option');opt.value=f.name.split('/').pop();opt.textContent=opt.value;select.append(opt)}out.textContent=select.options.length+' remote file(s) ready';await loadIRKeys()}catch(e){out.textContent=String(e)}}
+async function loadIRKeys(){const name=document.getElementById('ir-preset-file').value;const target=document.getElementById('ir-preset-buttons');target.replaceChildren();if(!name)return;try{const r=await fetch('/api/ir/inspect?file='+encodeURIComponent(name));const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));for(const k of d.keys||[]){const button=document.createElement('button');button.textContent=k.name;button.addEventListener('click',async()=>{if(!confirm('Send '+k.name+' to your device using '+name+'?'))return;const out=document.getElementById('ir-preset-status');out.textContent='Transmitting...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:name,key:k.name})});const result=await response.json();out.textContent=result.ok?'IR transmitted; device response not verified':JSON.stringify(result)}catch(e){out.textContent=String(e)}});target.append(button)}}catch(e){document.getElementById('ir-preset-status').textContent=String(e)}}
+async function importIRFileUI(){const file=document.getElementById('ir-import-file').files[0];if(!file)return;const out=document.getElementById('ir-preset-status');if(file.size>32000){out.textContent='File exceeds 32 KB';return}try{const content=await file.text();const r=await fetch('/api/ir/import?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'text/plain'},body:content});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));out.textContent='Imported '+file.name;await refreshIRFiles()}catch(e){out.textContent=String(e)}}
+bleAdvertiseStatus();refreshIRFiles();
+</script><section id="infrared" class="panel"><div class="tag">INFRARED / TX</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section id="bluetooth" class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
