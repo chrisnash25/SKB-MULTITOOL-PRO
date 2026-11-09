@@ -1,0 +1,22 @@
+name: Build firmware
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Compile firmware
+        run: pio run -e m5stick-cplus2
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: skb-multitool-firmware
+          path: .pio/build/m5stick-cplus2/*.bin
