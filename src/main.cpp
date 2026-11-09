@@ -274,12 +274,12 @@ void uploadLogo() {
 void sendTVPower() {
  JsonDocument req;
  if(deserializeJson(req,server.arg("plain")) || !req["confirm"].is<bool>() || !req["confirm"].as<bool>()) {
-  server.send(400,"application/json","{\\"ok\\":false,\\"error\\":\\"confirmation_required\\"}");return;
+  JsonDocument err;err["ok"]=false;err["error"]="confirmation_required";String payload;serializeJson(err,payload);server.send(400,"application/json",payload);return;
  }
  String brand=req["brand"] | "";
  if(brand=="Samsung") IrSender.sendSamsung(0x07,0x02,0);
  else if(brand=="LG") IrSender.sendNEC(0x04,0x08,0);
- else {server.send(422,"application/json","{\\"ok\\":false,\\"error\\":\\"brand_not_yet_verified\\"}");return;}
+ else {JsonDocument err;err["ok"]=false;err["error"]="brand_not_yet_verified";String payload;serializeJson(err,payload);server.send(422,"application/json",payload);return;}
  JsonDocument out;out["ok"]=true;out["brand"]=brand;out["command"]="power_toggle";out["note"]="IR transmission attempted; TV state cannot be verified";String json;serializeJson(out,json);server.send(200,"application/json",json);
 }
 
