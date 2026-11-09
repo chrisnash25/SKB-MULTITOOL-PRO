@@ -10,6 +10,10 @@
 static WebServer server(80);
 static Preferences skbPrefs;
 static BLEScan* bleScanner = nullptr;
+static String trackedBleAddress;
+static bool trackedBleSeen = false;
+static int trackedBleRssi = -127;
+static unsigned long trackedBleLastSeenMs = 0;
 static bool pathShieldEnabled = false;
 static unsigned long pathShieldEnabledSince = 0;
 
@@ -104,19 +108,60 @@ void scanBle() {
   doc["source"] = "ble_advertisements";
   doc["duration_seconds"] = 3;
   JsonArray devices = doc["devices"].to<JsonArray>();
+  bool foundTracked = false;
   int count = results.getCount();
   for (int i=0; i<count && i<40; ++i) {
     BLEAdvertisedDevice device = results.getDevice(i);
     JsonObject item = devices.add<JsonObject>();
-    item["address"] = String(device.getAddress().toString().c_str());
+    String address = String(device.getAddress().toString().c_str());
+    item["address"] = address;
+    if (trackedBleAddress.length() && address.equalsIgnoreCase(trackedBleAddress)) {
+      foundTracked = true;
+      trackedBleRssi = device.getRSSI();
+      trackedBleLastSeenMs = millis();
+    }
     item["rssi"] = device.getRSSI();
     if (device.haveName()) item["name"] = String(device.getName().c_str());
     if (device.haveManufacturerData()) item["manufacturer_data_bytes"] = device.getManufacturerData().length();
     if (device.haveServiceUUID()) item["service_uuid"] = String(device.getServiceUUID().toString().c_str());
   }
+  trackedBleSeen = foundTracked;
+  JsonObject tracking = doc["tracking"].to<JsonObject>();
+  tracking["address"] = trackedBleAddress;
+  tracking["seen_this_scan"] = foundTracked;
+  if (foundTracked) tracking["rssi"] = trackedBleRssi;
+  tracking["last_seen_uptime_ms"] = trackedBleLastSeenMs;
+  tracking["note"] = "Not seen does not guarantee departure; BLE addresses may rotate.";
   String json;
   serializeJson(doc,json);
   bleScanner->clearResults();
+  server.send(200,"application/json",json);
+}
+
+void bleTrackingSettings() {
+  if (server.method() == HTTP_POST) {
+    JsonDocument request;
+    if (deserializeJson(request,server.arg("plain")) || !request["address"].is<const char*>()) {
+      server.send(400,"application/json","{\"ok\":false,\"error\":\"address_required\"}"); return;
+    }
+    String address = request["address"].as<String>();
+    address.trim();
+    if (address.length() && (address.length()!=17 || address.charAt(2)!=':' || address.charAt(5)!=':' || address.charAt(8)!=':' || address.charAt(11)!=':' || address.charAt(14)!=':')) {
+      server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_ble_address\"}"); return;
+    }
+    trackedBleAddress = address;
+    trackedBleSeen = false;
+    trackedBleRssi = -127;
+    trackedBleLastSeenMs = 0;
+    skbPrefs.putString("ble_target",trackedBleAddress);
+  }
+  JsonDocument response;
+  response["ok"] = true;
+  response["address"] = trackedBleAddress;
+  response["seen_this_scan"] = trackedBleSeen;
+  if (trackedBleSeen) response["rssi"] = trackedBleRssi;
+  response["last_seen_uptime_ms"] = trackedBleLastSeenMs;
+  String json; serializeJson(response,json);
   server.send(200,"application/json",json);
 }
 
@@ -163,6 +208,7 @@ void setup() {
   M5.begin(cfg);
   skbPrefs.begin("skb-settings",false);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
+  trackedBleAddress=skbPrefs.getString("ble_target","");
   // Headless-first: no screen interaction required.
   M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
@@ -179,6 +225,8 @@ void setup() {
   bleScanner->setActiveScan(false);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/ble/scan", HTTP_GET, scanBle);
+  server.on("/api/ble/tracking", HTTP_GET, bleTrackingSettings);
+  server.on("/api/ble/tracking", HTTP_POST, bleTrackingSettings);
   server.on("/api/pathshield", HTTP_GET, sendPathShieldStatus);
   server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
@@ -203,20 +251,23 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <section class="panel"><div class="tag">INFRARED</div><h2>TV-B-Gone / Monitor-B-Gone</h2><p class="muted">IR code catalogue and controlled power profiles are being integrated. No transmission is enabled on this build.</p><button disabled>TV library — pending</button> <button disabled>Monitor library — pending</button></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
-<section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre></section>
+<section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
 <section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">Anti-tracking mode configuration. Detection and alerts are not yet available.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
-async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm').join('\\n')||'No BLE advertisements found'}catch(e){el.textContent=String(e)}}
+async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm').join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2)}catch(e){el.textContent=String(e)}}
+async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
+async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
+async function loadBleTarget(){try{const d=await (await fetch('/api/ble/tracking')).json();document.getElementById('ble-target').value=d.address||'';document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){}}
 async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
 async function signalWifi(){try{const d=await (await fetch('/api/signal/wifi')).json();document.getElementById('signal-wifi').textContent=(d.signals||[]).map(n=>n.ssid+' ('+n.bssid+') '+n.rssi+' dBm').join('\\n')||'Run a Wi-Fi scan first'}catch(e){document.getElementById('signal-wifi').textContent=String(e)}}
 async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?'Enabled in settings — scanner integration pending':'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 async function setPathShield(enabled){try{await fetch('/api/pathshield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});pathShieldStatus()}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
-statusNow();pathShieldStatus();setInterval(statusNow,5000);
+statusNow();pathShieldStatus();loadBleTarget();setInterval(statusNow,5000);
 </script></html>
 )SKBHTML");
   });
