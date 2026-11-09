@@ -6,8 +6,13 @@
 #include <Preferences.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#include <IRremote.hpp>
+#include <LittleFS.h>
 
 static WebServer server(80);
+static constexpr uint8_t IR_PIN = 19;
+static bool filesystemReady = false;
+static File logoUploadFile;
 static Preferences skbPrefs;
 static BLEScan* bleScanner = nullptr;
 static String trackedBleAddress;
@@ -221,11 +226,40 @@ void onSerialLine(const String& line) {
   Serial.println();
 }
 
+void sendIR() {
+  if (!server.hasArg("plain")) { server.send(400,"application/json","{\"ok\":false,\"error\":\"missing_body\"}"); return; }
+  JsonDocument request;
+  if (deserializeJson(request,server.arg("plain")) || !request["address"].is<int>() || !request["command"].is<int>()) {
+    server.send(400,"application/json","{\"ok\":false,\"error\":\"address_and_command_required\"}"); return;
+  }
+  int address = request["address"].as<int>(), command = request["command"].as<int>();
+  if (address<0 || address>65535 || command<0 || command>255) {
+    server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_nec_values\"}"); return;
+  }
+  IrSender.sendNEC((uint16_t)address,(uint8_t)command,0);
+  server.send(200,"application/json","{\"ok\":true,\"protocol\":\"NEC\",\"repeats\":0}");
+}
+void uploadLogo() {
+  HTTPUpload& upload=server.upload();
+  if (!filesystemReady) return;
+  if (upload.status==UPLOAD_FILE_START) {
+    if (upload.filename.endsWith(".png") || upload.filename.endsWith(".PNG")) {
+      logoUploadFile=LittleFS.open("/logo.png","w");
+    }
+  } else if (upload.status==UPLOAD_FILE_WRITE) {
+    if (logoUploadFile && upload.totalSize<=150000) logoUploadFile.write(upload.buf,upload.currentSize);
+  } else if (upload.status==UPLOAD_FILE_END || upload.status==UPLOAD_FILE_ABORTED) {
+    if (logoUploadFile) logoUploadFile.close();
+    if (upload.status==UPLOAD_FILE_ABORTED || upload.totalSize>150000) LittleFS.remove("/logo.png");
+  }
+}
 void setup() {
   Serial.begin(115200);
   auto cfg = M5.config();
   M5.begin(cfg);
   skbPrefs.begin("skb-settings",false);
+  filesystemReady=LittleFS.begin(true);
+  IrSender.begin(IR_PIN);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   trackedBleAddress=skbPrefs.getString("ble_target","");
   // Headless-first: no screen interaction required.
@@ -243,6 +277,8 @@ void setup() {
   bleScanner = BLEDevice::getScan();
   bleScanner->setActiveScan(false);
   server.on("/api/status", HTTP_GET, sendStatus);
+  server.on("/api/ir/nec", HTTP_POST, sendIR);
+  server.on("/api/logo", HTTP_POST, [](){server.send(filesystemReady?200:503,"application/json",filesystemReady?"{\"ok\":true}":"{\"ok\":false}");}, uploadLogo);
   server.on("/api/ble/scan", HTTP_GET, scanBle);
   server.on("/api/ble/tracking", HTTP_GET, bleTrackingSettings);
   server.on("/api/ble/tracking", HTTP_POST, bleTrackingSettings);
@@ -265,9 +301,9 @@ button:disabled{opacity:.45}.grid{display:grid;grid-template-columns:1fr 1fr;gap
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{color:#7bdcff}
 </style><main>
 <header class="hero"><img src="/logo.png" alt="Original SKB emblem" onerror="this.style.display='none'">
-<h1>SKB MULTITOOL PRO</h1><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 • Samsung Galaxy S21</p></header>
+<h1>SKB MULTITOOL PRO</h1><div><label class="muted">Upload original stitched SKB PNG (max 150 KB) <input id="logo-file" type="file" accept="image/png"></label><button onclick="uploadBrandLogo()">Apply logo</button><small id="logo-result"></small></div><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 • Samsung Galaxy S21</p></header>
 <section class="panel"><div class="tag">DEVICE</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
-<section class="panel"><div class="tag">INFRARED</div><h2>TV-B-Gone / Monitor-B-Gone</h2><p class="muted">IR code catalogue and controlled power profiles are being integrated. No transmission is enabled on this build.</p><button disabled>TV library — pending</button> <button disabled>Monitor library — pending</button></section>
+<section class="panel"><div class="tag">INFRARED</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
@@ -280,6 +316,8 @@ async function scanBle(){const el=document.getElementById('ble-results');el.text
 async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
 async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
 async function loadBleTarget(){try{const d=await (await fetch('/api/ble/tracking')).json();document.getElementById('ble-target').value=d.address||'';document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){}}
+async function sendIr(){try{const address=Number(document.getElementById('ir-address').value),command=Number(document.getElementById('ir-command').value);const r=await fetch('/api/ir/nec',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address,command})});document.getElementById('ir-result').textContent=JSON.stringify(await r.json())}catch(e){document.getElementById('ir-result').textContent=String(e)}}
+async function uploadBrandLogo(){const f=document.getElementById('logo-file').files[0];if(!f||f.type!=='image/png'||f.size>150000){document.getElementById('logo-result').textContent='Select a PNG under 150 KB';return}const data=new FormData();data.append('file',f);const r=await fetch('/api/logo',{method:'POST',body:data});document.getElementById('logo-result').textContent=JSON.stringify(await r.json());document.querySelector('.hero img').src='/logo.png?t='+Date.now()}
 async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
@@ -291,7 +329,8 @@ statusNow();pathShieldStatus();loadBleTarget();setInterval(statusNow,5000);
 )SKBHTML");
   });
   server.on("/logo.png", HTTP_GET, []() {
-    server.send(404, "text/plain", "Logo asset not yet installed in firmware");
+    if(!filesystemReady || !LittleFS.exists("/logo.png")) {server.send(404,"text/plain","Upload SKB logo PNG using the dashboard");return;}
+    File logo=LittleFS.open("/logo.png","r");server.streamFile(logo,"image/png");logo.close();
   });
   server.begin();
 }
