@@ -20,6 +20,8 @@ static bool trackedBleSeen = false;
 static int trackedBleRssi = -127;
 static unsigned long trackedBleLastSeenMs = 0;
 static bool pathShieldEnabled = false;
+static unsigned int trackerCandidatesLastScan = 0;
+static String trackerAlert = "No BLE scan yet";
 static unsigned long pathShieldEnabledSince = 0;
 
 void sendPathShieldStatus() {
@@ -28,6 +30,8 @@ void sendPathShieldStatus() {
   doc["enabled"] = pathShieldEnabled;
   doc["scanner_ready"] = (bleScanner != nullptr);
   doc["mode"] = "ble_candidate_classification";
+  doc["candidate_count"] = trackerCandidatesLastScan;
+  doc["alert"] = trackerAlert;
   doc["note"] = "BLE candidate classification is available; persistence scoring and alerts remain pending";
   String json; serializeJson(doc, json);
   server.send(200, "application/json", json);
@@ -114,6 +118,7 @@ void scanBle() {
   doc["duration_seconds"] = 3;
   JsonArray devices = doc["devices"].to<JsonArray>();
   bool foundTracked = false;
+  unsigned int candidateCount = 0;
   int count = results.getCount();
   for (int i=0; i<count && i<40; ++i) {
     BLEAdvertisedDevice device = results.getDevice(i);
@@ -146,10 +151,14 @@ void scanBle() {
         if (uuid.indexOf("fd51") >= 0 || uuid.indexOf("fd52") >= 0) candidate = "Tile-compatible service candidate";
         else if (uuid.indexOf("fd6f") >= 0) candidate = "SmartThings-compatible service candidate";
       }
-      if (candidate.length()) item["tracker_candidate"] = candidate;
+      if (candidate.length()) { item["tracker_candidate"] = candidate; ++candidateCount; }
     }
   }
   trackedBleSeen = foundTracked;
+  if (pathShieldEnabled) {
+    trackerCandidatesLastScan = candidateCount;
+    trackerAlert = candidateCount ? String(candidateCount) + " tracker-related advertisement candidate(s)" : "No tracker candidates found in last scan";
+  }
   JsonObject tracking = doc["tracking"].to<JsonObject>();
   tracking["address"] = trackedBleAddress;
   tracking["seen_this_scan"] = foundTracked;
@@ -247,7 +256,7 @@ void uploadLogo() {
       logoUploadFile=LittleFS.open("/logo.png","w");
     }
   } else if (upload.status==UPLOAD_FILE_WRITE) {
-    if (logoUploadFile && upload.totalSize<=150000) logoUploadFile.write(upload.buf,upload.currentSize);
+    if (logoUploadFile && upload.totalSize+upload.currentSize<=150000) logoUploadFile.write(upload.buf,upload.currentSize);
   } else if (upload.status==UPLOAD_FILE_END || upload.status==UPLOAD_FILE_ABORTED) {
     if (logoUploadFile) logoUploadFile.close();
     if (upload.status==UPLOAD_FILE_ABORTED || upload.totalSize>150000) LittleFS.remove("/logo.png");
@@ -300,7 +309,7 @@ button{background:#123a50;border:1px solid #34bfff;border-radius:12px;color:#e9f
 button:disabled{opacity:.45}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid .panel{margin:0}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{color:#7bdcff}
 </style><main>
-<header class="hero"><img src="/logo.png" alt="Original SKB emblem" onerror="this.style.display='none'">
+<header class="hero"><img src="/logo.png" alt="Original SKB emblem" >
 <h1>SKB MULTITOOL PRO</h1><div><label class="muted">Upload original stitched SKB PNG (max 150 KB) <input id="logo-file" type="file" accept="image/png"></label><button onclick="uploadBrandLogo()">Apply logo</button><small id="logo-result"></small></div><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 • Samsung Galaxy S21</p></header>
 <section class="panel"><div class="tag">DEVICE</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
 <section class="panel"><div class="tag">INFRARED</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
@@ -322,7 +331,7 @@ async function statusNow(){try{const r=await fetch('/api/status');document.getEl
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
 async function signalWifi(){try{const d=await (await fetch('/api/signal/wifi')).json();document.getElementById('signal-wifi').textContent=(d.signals||[]).map(n=>n.ssid+' ('+n.bssid+') '+n.rssi+' dBm').join('\\n')||'Run a Wi-Fi scan first'}catch(e){document.getElementById('signal-wifi').textContent=String(e)}}
-async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?'Enabled in settings — scanner integration pending':'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
+async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?('Enabled — '+d.alert):'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 async function setPathShield(enabled){try{await fetch('/api/pathshield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});pathShieldStatus()}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 statusNow();pathShieldStatus();loadBleTarget();setInterval(statusNow,5000);
 </script></html>
