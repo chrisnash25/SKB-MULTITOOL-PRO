@@ -11,7 +11,6 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.hardware.usb.UsbInterface;
-import com.hoho.android.usbserial.driver.ProbeTable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -188,7 +187,8 @@ public final class MainActivity extends Activity {
         }
         if (ch9102 != null) {
             UsbSerialDriver explicit = new CdcAcmSerialDriver(ch9102);
-            drivers.removeIf(d -> d.getDevice().getDeviceId() == ch9102.getDeviceId());
+            final int ch9102DeviceId=ch9102.getDeviceId();
+            drivers.removeIf(d -> d.getDevice().getDeviceId() == ch9102DeviceId);
             drivers.add(0, explicit);
         }
         if (drivers.isEmpty()) {
