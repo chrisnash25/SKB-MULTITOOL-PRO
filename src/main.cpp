@@ -4,9 +4,12 @@
 #include <ArduinoJson.h>
 #include <M5Unified.h>
 #include <Preferences.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
 
 static WebServer server(80);
 static Preferences skbPrefs;
+static BLEScan* bleScanner = nullptr;
 static bool pathShieldEnabled = false;
 static unsigned long pathShieldEnabledSince = 0;
 
@@ -93,6 +96,30 @@ void wifiResults() {
 }
 
 
+void scanBle() {
+  if (!bleScanner) {server.send(503,"application/json","{\"ok\":false,\"error\":\"ble_not_ready\"}");return;}
+  BLEScanResults results = bleScanner->start(3, false);
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["source"] = "ble_advertisements";
+  doc["duration_seconds"] = 3;
+  JsonArray devices = doc["devices"].to<JsonArray>();
+  int count = results.getCount();
+  for (int i=0; i<count && i<40; ++i) {
+    BLEAdvertisedDevice device = results.getDevice(i);
+    JsonObject item = devices.add<JsonObject>();
+    item["address"] = String(device.getAddress().toString().c_str());
+    item["rssi"] = device.getRSSI();
+    if (device.haveName()) item["name"] = String(device.getName().c_str());
+    if (device.haveManufacturerData()) item["manufacturer_data_bytes"] = device.getManufacturerData().length();
+    if (device.haveServiceUUID()) item["service_uuid"] = String(device.getServiceUUID().toString().c_str());
+  }
+  String json;
+  serializeJson(doc,json);
+  bleScanner->clearResults();
+  server.send(200,"application/json",json);
+}
+
 void sendStatus() {
   JsonDocument doc;
   doc["ok"] = true;
@@ -147,7 +174,11 @@ void setup() {
   M5.Display.println("  PRO");
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(apName);
+  BLEDevice::init("SKB-MULTITOOL-PRO");
+  bleScanner = BLEDevice::getScan();
+  bleScanner->setActiveScan(false);
   server.on("/api/status", HTTP_GET, sendStatus);
+  server.on("/api/ble/scan", HTTP_GET, scanBle);
   server.on("/api/pathshield", HTTP_GET, sendPathShieldStatus);
   server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
@@ -171,12 +202,14 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <section class="panel"><div class="tag">DEVICE</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
 <section class="panel"><div class="tag">INFRARED</div><h2>TV-B-Gone / Monitor-B-Gone</h2><p class="muted">IR code catalogue and controlled power profiles are being integrated. No transmission is enabled on this build.</p><button disabled>TV library — pending</button> <button disabled>Monitor library — pending</button></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
-<section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">Firmware integration pending</p><button disabled>Discover</button></section></div>
+<section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
+<section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre></section>
 <section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">Anti-tracking mode configuration. Detection and alerts are not yet available.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
+async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm').join('\\n')||'No BLE advertisements found'}catch(e){el.textContent=String(e)}}
 async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
