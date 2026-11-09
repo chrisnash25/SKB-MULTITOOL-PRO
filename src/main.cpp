@@ -292,6 +292,18 @@ void sendStoredIR() {
  server.send(404,"application/json","{\"ok\":false,\"error\":\"key_not_found\"}");
 }
 
+
+void inspectStoredIR() {
+ String name=server.arg("file");
+ if(name.isEmpty()||name.indexOf('/')>=0||name.indexOf('\\')>=0||name.indexOf("..")>=0||!name.endsWith(".ir")){server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_file\"}");return;}
+ File file=LittleFS.open("/ir/"+name,"r");if(!file){server.send(404,"application/json","{\"ok\":false,\"error\":\"not_found\"}");return;}
+ if(file.size()>32000){file.close();server.send(413,"application/json","{\"ok\":false,\"error\":\"too_large\"}");return;}
+ String body=file.readString();file.close();std::vector<SKBIR::Signal> signals;String error;
+ if(!SKBIR::parse(body,signals,error)){server.send(422,"application/json","{\"ok\":false,\"error\":\"invalid_ir_file\"}");return;}
+ JsonDocument doc;doc["ok"]=true;JsonArray keys=doc["keys"].to<JsonArray>();for(const auto &signal:signals){JsonObject key=keys.add<JsonObject>();key["name"]=signal.name;key["protocol"]=signal.protocol;}
+ String out;serializeJson(doc,out);server.send(200,"application/json",out);
+}
+
 void setup() {
   Serial.begin(115200);
   auto cfg = M5.config();
@@ -318,6 +330,7 @@ void setup() {
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
   server.on("/api/ir/library", HTTP_GET, listIRLibrary);
+  server.on("/api/ir/inspect", HTTP_GET, inspectStoredIR);
   server.on("/api/ir/import", HTTP_POST, importIRFile);
   server.on("/api/ir/send", HTTP_POST, sendStoredIR);
   server.on("/api/logo", HTTP_POST, [](){server.send(filesystemReady?200:503,"application/json",filesystemReady?"{\"ok\":true}":"{\"ok\":false}");}, uploadLogo);
@@ -359,7 +372,16 @@ a{color:#e46d6d}.nav{display:flex;gap:7px;overflow:auto;padding:0 0 14px}.nav a{
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section id="wifi" class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
-</main><script>
+<section class="panel" id="monitor-power"><h2>MONITOR POWER CONTROL</h2><p class="muted">Choose an imported monitor remote and its power command. Transmission requires confirmation. Power may toggle rather than force OFF.</p><label>Monitor IR file <select id="monitor-file" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label><p><label>Power command <select id="monitor-key" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label></p><button type="button" id="monitor-refresh">REFRESH MONITOR REMOTES</button> <button type="button" id="monitor-send" disabled>POWER (CONFIRM)</button><pre id="monitor-result" aria-live="polite">No monitor remote selected</pre></section>
+<script>
+(()=>{const file=document.getElementById('monitor-file'),key=document.getElementById('monitor-key'),send=document.getElementById('monitor-send'),out=document.getElementById('monitor-result');const power=/^(power|power on.off|on.off|standby|pwr|power_toggle)$/i;
+async function request(url,options){const response=await fetch(url,options);const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'Request failed');return data;}
+async function inspect(){send.disabled=true;key.replaceChildren();if(!file.value)return;try{const data=await request('/api/ir/inspect?file='+encodeURIComponent(file.value));for(const entry of data.keys.filter(x=>power.test(x.name.trim()))){const option=document.createElement('option');option.value=entry.name;option.textContent=entry.name+' ('+entry.protocol+')';key.append(option);}send.disabled=!key.options.length;out.textContent=key.options.length?'Power command ready. Confirmation required.':'No supported power key in this file.';}catch(e){out.textContent=e.message;}}
+async function refresh(){file.replaceChildren();send.disabled=true;try{const data=await request('/api/ir/library');for(const entry of data.files){const name=entry.name.split('/').pop();const option=document.createElement('option');option.value=name;option.textContent=name;file.append(option);}await inspect();}catch(e){out.textContent=e.message;}}
+file.addEventListener('change',inspect);document.getElementById('monitor-refresh').addEventListener('click',refresh);
+send.addEventListener('click',async()=>{if(!file.value||!key.value)return;if(!confirm('Transmit '+key.value+' from '+file.value+'? This may toggle the monitor power.'))return;send.disabled=true;out.textContent='Transmitting...';try{const result=await request('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file.value,key:key.value})});out.textContent=result.ok?'IR command transmitted (monitor response cannot be verified).':'Transmission failed';}catch(e){out.textContent='Error: '+e.message;}finally{send.disabled=false;}});
+refresh();})();
+</script></main><script>
 async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm'+(n.tracker_candidate?' ['+n.tracker_candidate+']':'')).join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2);pathShieldStatus()}catch(e){el.textContent=String(e)}}
 async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
 async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
