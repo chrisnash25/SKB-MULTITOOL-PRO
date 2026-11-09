@@ -87,7 +87,7 @@ void setup() {
   Serial.begin(115200);
   auto cfg = M5.config();
   M5.begin(cfg);
-  M5.Display.setRotation(0);
+  // Headless-first: no screen interaction required.\n  M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
   M5.Display.setTextSize(2);
@@ -101,7 +101,36 @@ void setup() {
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
   server.on("/api/wifi/results", HTTP_GET, wifiResults);
   server.on("/", HTTP_GET, []() {
-    server.send(200, "text/html", "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{background:#090d14;color:#e7edf8;font-family:sans-serif;padding:20px}h1{color:#38bdf8}</style><h1>SKB MULTITOOL PRO</h1><pre id='s'>Loading...</pre><script>async function tick(){try{let r=await fetch('/api/status');document.getElementById('s').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('s').textContent='Disconnected'}}tick();setInterval(tick,3000)</script>");
+    server.send(200, "text/html", R"SKBHTML(
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SKB MULTITOOL PRO</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080c12;color:#eaf1fa;font:15px system-ui,Arial}
+main{max-width:560px;margin:auto;padding:17px}.hero,.panel{background:linear-gradient(145deg,#192230,#10151e);border:1px solid #2a4055;border-radius:20px;padding:18px;margin-bottom:13px}
+.hero{text-align:center}.hero img{width:112px;height:112px;object-fit:contain}h1{font-size:22px;margin:7px 0;color:#dce9f7}
+h2{font-size:18px;margin:4px 0 7px}small,.muted{color:#91a8bc}.tag{color:#69d5ff;font-size:12px;letter-spacing:1.5px}
+button{background:#123a50;border:1px solid #34bfff;border-radius:12px;color:#e9f8ff;font-weight:700;padding:12px 15px;cursor:pointer}
+button:disabled{opacity:.45}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid .panel{margin:0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{color:#7bdcff}
+</style><main>
+<header class="hero"><img src="/logo.png" alt="Original SKB emblem" onerror="this.style.display='none'">
+<h1>SKB MULTITOOL PRO</h1><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 • Samsung Galaxy S21</p></header>
+<section class="panel"><div class="tag">DEVICE</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
+<section class="panel"><div class="tag">INFRARED</div><h2>TV-B-Gone / Monitor-B-Gone</h2><p class="muted">IR code catalogue and controlled power profiles are being integrated. No transmission is enabled on this build.</p><button disabled>TV library — pending</button> <button disabled>Monitor library — pending</button></section>
+<div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
+<section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">Firmware integration pending</p><button disabled>Discover</button></section></div>
+<section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
+<p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
+</main><script>
+async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
+async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
+async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
+statusNow();setInterval(statusNow,5000);
+</script></html>
+)SKBHTML");
+  });
+  server.on("/logo.png", HTTP_GET, []() {
+    server.send(404, "text/plain", "Logo asset not yet installed in firmware");
   });
   server.begin();
 }
