@@ -3,8 +3,36 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <M5Unified.h>
+#include <Preferences.h>
 
 static WebServer server(80);
+static Preferences skbPrefs;
+static bool pathShieldEnabled = false;
+static unsigned long pathShieldEnabledSince = 0;
+
+void sendPathShieldStatus() {
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["enabled"] = pathShieldEnabled;
+  doc["scanner_ready"] = false;
+  doc["mode"] = "configuration_only";
+  doc["note"] = "BLE persistence detection and alerts are not yet integrated";
+  String json; serializeJson(doc, json);
+  server.send(200, "application/json", json);
+}
+
+void setPathShieldEnabled() {
+  if (!server.hasArg("plain")) {server.send(400,"application/json","{\"ok\":false,\"error\":\"missing_body\"}");return;}
+  JsonDocument doc;
+  if (deserializeJson(doc,server.arg("plain")) || !doc["enabled"].is<bool>()) {
+    server.send(400,"application/json","{\"ok\":false,\"error\":\"expected_boolean_enabled\"}");return;
+  }
+  pathShieldEnabled=doc["enabled"].as<bool>();
+  skbPrefs.putBool("pathshield",pathShieldEnabled);
+  pathShieldEnabledSince=millis();
+  sendPathShieldStatus();
+}
+
 static const char* apName = "SKB-MULTITOOL-PRO";
 static String input;
 static bool wifiScanning = false;
@@ -55,6 +83,7 @@ void sendStatus() {
   doc["free_heap"] = ESP.getFreeHeap();
   doc["ap_ip"] = WiFi.softAPIP().toString();
   doc["battery_voltage"] = M5.Power.getBatteryVoltage();
+  doc["pathshield_enabled"] = pathShieldEnabled;
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -87,6 +116,8 @@ void setup() {
   Serial.begin(115200);
   auto cfg = M5.config();
   M5.begin(cfg);
+  skbPrefs.begin("skb-settings",false);
+  pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   // Headless-first: no screen interaction required.\n  M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -98,6 +129,8 @@ void setup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(apName);
   server.on("/api/status", HTTP_GET, sendStatus);
+  server.on("/api/pathshield", HTTP_GET, sendPathShieldStatus);
+  server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
   server.on("/api/wifi/results", HTTP_GET, wifiResults);
   server.on("/", HTTP_GET, []() {
@@ -119,13 +152,16 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <section class="panel"><div class="tag">INFRARED</div><h2>TV-B-Gone / Monitor-B-Gone</h2><p class="muted">IR code catalogue and controlled power profiles are being integrated. No transmission is enabled on this build.</p><button disabled>TV library — pending</button> <button disabled>Monitor library — pending</button></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">Firmware integration pending</p><button disabled>Discover</button></section></div>
+<section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">Anti-tracking mode configuration. Detection and alerts are not yet available.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
 async function statusNow(){try{const r=await fetch('/api/status');document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('status').textContent='Disconnected'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
 async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
-statusNow();setInterval(statusNow,5000);
+async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?'Enabled in settings — scanner integration pending':'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
+async function setPathShield(enabled){try{await fetch('/api/pathshield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});pathShieldStatus()}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
+statusNow();pathShieldStatus();setInterval(statusNow,5000);
 </script></html>
 )SKBHTML");
   });
