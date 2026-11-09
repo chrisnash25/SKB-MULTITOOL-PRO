@@ -8,7 +8,25 @@
 #include <vector>
 namespace SKBIR {
 struct Signal { String name, protocol; uint32_t address=0,command=0,frequency=38000; std::vector<uint16_t> timings; };
-inline bool parseNumber(String s,uint32_t &out) {s.trim();if(!s.length())return false; char *end=nullptr;unsigned long n=strtoul(s.c_str(),&end,0);if(*end)return false;out=n;return true;}
+inline bool parseNumber(String s,uint32_t &out) {
+ s.trim();if(!s.length())return false;
+ // Flipper IRDB stores little-endian hex bytes separated by spaces.
+ if(s.indexOf(' ')>=0) {
+  uint32_t value=0;unsigned count=0;int pos=0;
+  while(pos<s.length()) {
+   while(pos<s.length() && s[pos]==' ')++pos;
+   if(pos>=s.length())break;
+   int end=s.indexOf(' ',pos);if(end<0)end=s.length();
+   String part=s.substring(pos,end);if(part.length()!=2 || count>=4)return false;
+   for(unsigned i=0;i<2;i++)if(!isxdigit((unsigned char)part[i]))return false;
+   value |= ((uint32_t)strtoul(part.c_str(),nullptr,16))<<(8*count++);
+   pos=end+1;
+  }
+  if(!count)return false;out=value;return true;
+ }
+ char *end=nullptr;unsigned long n=strtoul(s.c_str(),&end,0);
+ if(*end)return false;out=n;return true;
+}
 inline bool parse(const String &source,std::vector<Signal>&signals,String &error) {
  if(source.length()>32000){error="file_too_large";return false;}
  Signal current;bool active=false;int pos=0;
