@@ -415,11 +415,32 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080809;border:1px so
 a{color:#e46d6d}.nav{display:flex;gap:7px;overflow:auto;padding:0 0 14px}.nav a{flex:none;text-decoration:none;background:linear-gradient(#292929,#111);border:1px solid #594444;border-bottom:2px solid #a12c2c;color:#eee;padding:9px;border-radius:5px;font-size:12px;font-weight:700}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#6aa876;margin-right:5px}
 @media(max-width:360px){.grid{grid-template-columns:1fr}}
-</style><main><section class="panel" id="tv-power-panel"><h2>TV POWER CONTROL</h2><p class="muted">Select your own TV brand. One power-toggle signal per confirmed press.</p><label for="tv-brand">Verified TV brand</label><select id="tv-brand" style="width:100%;padding:12px;background:#151515;color:white;border:1px solid #794747;border-radius:6px"><option value="Samsung">Samsung</option><option value="LG">LG</option></select><button type="button" id="tv-power-button" style="display:block;width:100%;margin-top:12px">POWER TOGGLE — CONFIRM</button><p id="tv-power-result" role="status" class="muted">No command sent</p></section>
+
+/* Mobile-first paged controller: no endless scrolling between tools. */
+html,body{height:100%;overflow:hidden}
+main{height:100vh;height:100dvh;max-width:640px;display:flex;flex-direction:column;overflow:hidden;padding:8px 10px 10px}
+.skb-tabs{display:flex;gap:6px;overflow-x:auto;flex:none;padding:4px 2px 9px;scrollbar-width:thin}
+.skb-tabs button{flex:none;white-space:nowrap;min-height:42px;padding:9px 14px;border-radius:6px;font-size:12px;letter-spacing:.15px}
+.skb-tabs button[aria-selected="true"]{background:linear-gradient(#7e2020,#451515);border-color:#e66b6b;color:#fff}
+.skb-pages{flex:1;min-height:0;overflow:hidden}
+.skb-page{display:none;height:100%;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:0 2px 18px;scrollbar-width:thin}
+.skb-page.skb-active{display:block}
+.skb-page-title{position:sticky;top:0;z-index:2;background:linear-gradient(90deg,#261717,#101011);border-bottom:1px solid #6b2929;padding:8px 10px;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.skb-page-title strong{font-size:16px;letter-spacing:.7px}
+.skb-page-title span{font-size:11px;color:#cfa0a0}
+.skb-pager{flex:none;display:flex;align-items:center;gap:9px;justify-content:space-between;border-top:1px solid #6a3333;padding:9px 2px 0;background:#0b0b0c}
+.skb-pager button{min-width:97px;min-height:48px}
+.skb-pager button:disabled{opacity:.34;cursor:default}
+.skb-page-indicator{text-align:center;flex:1;font-size:12px;color:#e6dddd;font-weight:700}
+.skb-page-indicator small{display:block;color:#b5a4a4;font-size:10px;font-weight:400}
+.skb-page .panel{margin-bottom:12px}
+.skb-page select{max-width:100%}
+@media(max-width:360px){.skb-pager button{min-width:80px}.skb-tabs button{padding:8px 11px}}
+</style><main><section class="panel" id="tv-power-panel"><h2>TV POWER CONTROL</h2><p class="muted">Select your own TV brand. One power-toggle signal per tap.</p><label for="tv-brand">Verified TV brand</label><select id="tv-brand" style="width:100%;padding:12px;background:#151515;color:white;border:1px solid #794747;border-radius:6px"><option value="Samsung">Samsung</option><option value="LG">LG</option></select><button type="button" id="tv-power-button" style="display:block;width:100%;margin-top:12px">POWER TOGGLE</button><p id="tv-power-result" role="status" class="muted">No command sent</p></section>
 <script>
 document.getElementById('tv-power-button').addEventListener('click',async()=>{
 const brand=document.getElementById('tv-brand').value;
-if(!confirm('Transmit one IR power-toggle command to your '+brand+' TV?'))return;
+
 const status=document.getElementById('tv-power-result');status.textContent='Sending…';
 try{const response=await fetch('/api/ir/tv-power',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand,confirm:true})});const data=await response.json();status.textContent=data.ok?'IR sent (TV state not confirmed)':('Error: '+(data.error||response.status));}
 catch(e){status.textContent='Connection failed: '+e.message;}
@@ -436,7 +457,7 @@ catch(e){status.textContent='Connection failed: '+e.message;}
 async function setBleAdvertise(enabled){const el=document.getElementById('ble-advertise-status');try{const r=await fetch('/api/ble/advertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});el.textContent=JSON.stringify(await r.json(),null,2)}catch(e){el.textContent=String(e)}}
 async function bleAdvertiseStatus(){try{document.getElementById('ble-advertise-status').textContent=JSON.stringify(await (await fetch('/api/ble/advertise')).json(),null,2)}catch(e){}}
 async function refreshIRFiles(){const select=document.getElementById('ir-preset-file');const out=document.getElementById('ir-preset-status');try{const r=await fetch('/api/ir/library');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));select.replaceChildren();for(const f of d.files||[]){const opt=document.createElement('option');opt.value=f.name.split('/').pop();opt.textContent=opt.value;select.append(opt)}out.textContent=select.options.length+' remote file(s) ready';await loadIRKeys()}catch(e){out.textContent=String(e)}}
-async function loadIRKeys(){const name=document.getElementById('ir-preset-file').value;const target=document.getElementById('ir-preset-buttons');target.replaceChildren();if(!name)return;try{const r=await fetch('/api/ir/inspect?file='+encodeURIComponent(name));const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));for(const k of d.keys||[]){const button=document.createElement('button');button.textContent=k.name;button.addEventListener('click',async()=>{if(!confirm('Send '+k.name+' to your device using '+name+'?'))return;const out=document.getElementById('ir-preset-status');out.textContent='Transmitting...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:name,key:k.name})});const result=await response.json();out.textContent=result.ok?'IR transmitted; device response not verified':JSON.stringify(result)}catch(e){out.textContent=String(e)}});target.append(button)}}catch(e){document.getElementById('ir-preset-status').textContent=String(e)}}
+async function loadIRKeys(){const name=document.getElementById('ir-preset-file').value;const target=document.getElementById('ir-preset-buttons');target.replaceChildren();if(!name)return;try{const r=await fetch('/api/ir/inspect?file='+encodeURIComponent(name));const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));for(const k of d.keys||[]){const button=document.createElement('button');button.textContent=k.name;button.addEventListener('click',async()=>{const out=document.getElementById('ir-preset-status');out.textContent='Transmitting...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:name,key:k.name})});const result=await response.json();out.textContent=result.ok?'IR transmitted; device response not verified':JSON.stringify(result)}catch(e){out.textContent=String(e)}});target.append(button)}}catch(e){document.getElementById('ir-preset-status').textContent=String(e)}}
 async function importIRFileUI(){const file=document.getElementById('ir-import-file').files[0];if(!file)return;const out=document.getElementById('ir-preset-status');if(file.size>32000){out.textContent='File exceeds 32 KB';return}try{const content=await file.text();const r=await fetch('/api/ir/import?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'text/plain'},body:content});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));out.textContent='Imported '+file.name;await refreshIRFiles()}catch(e){out.textContent=String(e)}}
 const monitorPowerPresets=[
 ['Aorus FV43U','Monitor_Aorus_FV43U.ir'],
@@ -449,7 +470,7 @@ const monitorPowerPresets=[
 ['Philips Evnia 49M2C8900L','Monitor_Philips_Evnia_49M2C8900L.ir']
 ];
 function renderMonitorPower(){const target=document.getElementById('monitor-power-buttons');if(!target)return;target.replaceChildren();for(const [label,file] of monitorPowerPresets){const b=document.createElement('button');b.type='button';b.textContent=label+' · Power';b.addEventListener('click',()=>sendMonitorPower(file,label));target.append(b)}}
-async function sendMonitorPower(file,label){if(!confirm('Transmit Power IR to '+label+'?'))return;const el=document.getElementById('monitor-power-status');el.textContent='Sending '+label+' Power...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,key:'Power'})});const result=await response.json();el.textContent=response.ok&&result.ok?label+': Power IR transmitted (monitor state unverified)':label+': '+JSON.stringify(result)}catch(e){el.textContent=label+': '+String(e)}}
+async function sendMonitorPower(file,label){const el=document.getElementById('monitor-power-status');el.textContent='Sending '+label+' Power...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,key:'Power'})});const result=await response.json();el.textContent=response.ok&&result.ok?label+': Power IR transmitted (monitor state unverified)':label+': '+JSON.stringify(result)}catch(e){el.textContent=label+': '+String(e)}}
 renderMonitorPower();bleAdvertiseStatus();refreshIRFiles();
 </script><section id="infrared" class="panel"><div class="tag">INFRARED / TX</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
@@ -459,16 +480,62 @@ renderMonitorPower();bleAdvertiseStatus();refreshIRFiles();
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section id="wifi" class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
-<section class="panel" id="monitor-power"><h2>MONITOR POWER CONTROL</h2><p class="muted">Choose an imported monitor remote and its power command. Transmission requires confirmation. Power may toggle rather than force OFF.</p><label>Monitor IR file <select id="monitor-file" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label><p><label>Power command <select id="monitor-key" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label></p><button type="button" id="monitor-refresh">REFRESH MONITOR REMOTES</button> <button type="button" id="monitor-send" disabled>POWER (CONFIRM)</button><pre id="monitor-result" aria-live="polite">No monitor remote selected</pre></section>
+<section class="panel" id="monitor-power"><h2>MONITOR POWER CONTROL</h2><p class="muted">Choose an imported monitor remote and its power command. Power transmits immediately when tapped; it may toggle rather than force OFF.</p><label>Monitor IR file <select id="monitor-file" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label><p><label>Power command <select id="monitor-key" style="width:100%;padding:12px;background:#111;color:#eee;border:1px solid #745454"></select></label></p><button type="button" id="monitor-refresh">REFRESH MONITOR REMOTES</button> <button type="button" id="monitor-send" disabled>POWER</button><pre id="monitor-result" aria-live="polite">No monitor remote selected</pre></section>
 <script>
 (()=>{const file=document.getElementById('monitor-file'),key=document.getElementById('monitor-key'),send=document.getElementById('monitor-send'),out=document.getElementById('monitor-result');const power=/^(power|power on.off|on.off|standby|pwr|power_toggle)$/i;
 async function request(url,options){const response=await fetch(url,options);const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'Request failed');return data;}
-async function inspect(){send.disabled=true;key.replaceChildren();if(!file.value)return;try{const data=await request('/api/ir/inspect?file='+encodeURIComponent(file.value));for(const entry of data.keys.filter(x=>power.test(x.name.trim()))){const option=document.createElement('option');option.value=entry.name;option.textContent=entry.name+' ('+entry.protocol+')';key.append(option);}send.disabled=!key.options.length;out.textContent=key.options.length?'Power command ready. Confirmation required.':'No supported power key in this file.';}catch(e){out.textContent=e.message;}}
+async function inspect(){send.disabled=true;key.replaceChildren();if(!file.value)return;try{const data=await request('/api/ir/inspect?file='+encodeURIComponent(file.value));for(const entry of data.keys.filter(x=>power.test(x.name.trim()))){const option=document.createElement('option');option.value=entry.name;option.textContent=entry.name+' ('+entry.protocol+')';key.append(option);}send.disabled=!key.options.length;out.textContent=key.options.length?'Power command ready. Tap POWER to transmit.':'No supported power key in this file.';}catch(e){out.textContent=e.message;}}
 async function refresh(){file.replaceChildren();send.disabled=true;try{const data=await request('/api/ir/library');for(const entry of data.files){const name=entry.name.split('/').pop();const option=document.createElement('option');option.value=name;option.textContent=name;file.append(option);}await inspect();}catch(e){out.textContent=e.message;}}
 file.addEventListener('change',inspect);document.getElementById('monitor-refresh').addEventListener('click',refresh);
-send.addEventListener('click',async()=>{if(!file.value||!key.value)return;if(!confirm('Transmit '+key.value+' from '+file.value+'? This may toggle the monitor power.'))return;send.disabled=true;out.textContent='Transmitting...';try{const result=await request('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file.value,key:key.value})});out.textContent=result.ok?'IR command transmitted (monitor response cannot be verified).':'Transmission failed';}catch(e){out.textContent='Error: '+e.message;}finally{send.disabled=false;}});
+send.addEventListener('click',async()=>{if(!file.value||!key.value)return;send.disabled=true;out.textContent='Transmitting...';try{const result=await request('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file.value,key:key.value})});out.textContent=result.ok?'IR command transmitted (monitor response cannot be verified).':'Transmission failed';}catch(e){out.textContent='Error: '+e.message;}finally{send.disabled=false;}});
 refresh();})();
 </script></main><script>
+(()=>{
+const host=document.querySelector('main');if(!host)return;
+const specs=[['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['settings','SETTINGS']];
+const containers={};
+const deck=document.createElement('div');deck.className='skb-pages';deck.id='skb-pages';
+const tabs=document.createElement('nav');tabs.className='skb-tabs';tabs.setAttribute('aria-label','Dashboard pages');
+const footer=document.createElement('div');footer.className='skb-pager';
+for(const [id,title] of specs){const pg=document.createElement('section');pg.className='skb-page';pg.id='skb-page-'+id;pg.setAttribute('aria-label',title);
+const head=document.createElement('div');head.className='skb-page-title';const strong=document.createElement('strong');strong.textContent=title;const hint=document.createElement('span');hint.textContent='SWIPE LEFT / RIGHT';head.append(strong,hint);pg.append(head);containers[id]=pg;deck.append(pg);
+const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.dataset.page=id;tab.setAttribute('aria-controls',pg.id);tab.addEventListener('click',()=>show(id));tabs.append(tab)}
+const original=Array.from(host.children);
+for(const node of original){
+if(node.tagName==='SCRIPT')continue;
+if(node.matches('nav.nav')){node.remove();continue;}
+if(node.matches('div.grid')&&node.querySelector('button[onclick="scan()"]')){
+for(const child of Array.from(node.children)){
+ const target=child.textContent.includes('Network scan')?'wifi':'bluetooth';
+ containers[target].append(child)}
+ node.remove();continue}
+let name='home';
+if(['tv-power-panel','ir-presets','infrared'].includes(node.id))name='tv';
+else if(node.id==='monitor-power'||node.querySelector('#monitor-file'))name='monitors';
+else if(['ble-advertising','bluetooth'].includes(node.id))name='bluetooth';
+else if(node.id==='wifi'||node.querySelector('#signal-wifi'))name='wifi';
+else if(node.id==='privacy')name='settings';
+else if(node.matches('p')&&node.textContent.includes('Access point:'))name='wifi';
+containers[name].append(node)
+}
+const prev=document.createElement('button'),next=document.createElement('button'),indicator=document.createElement('div');
+prev.type='button';next.type='button';prev.textContent='◀ PREVIOUS';next.textContent='NEXT ▶';prev.setAttribute('aria-label','Previous page');next.setAttribute('aria-label','Next page');
+indicator.className='skb-page-indicator';indicator.setAttribute('aria-live','polite');
+footer.append(prev,indicator,next);host.prepend(tabs);host.append(deck,footer);
+let current=0;
+function show(id){const n=typeof id==='number'?Math.max(0,Math.min(specs.length-1,id)):specs.findIndex(x=>x[0]===id);if(n<0)return;current=n;
+for(let i=0;i<specs.length;i++){const key=specs[i][0];const on=i===n;containers[key].classList.toggle('skb-active',on);containers[key].setAttribute('aria-hidden',String(!on));tabs.children[i].setAttribute('aria-selected',String(on))}
+prev.disabled=n===0;next.disabled=n===specs.length-1;indicator.textContent=specs[n][1]+' · '+(n+1)+' / '+specs.length;
+const hint=document.createElement('small');hint.textContent='Swipe to change pages';indicator.append(hint);
+containers[specs[n][0]].scrollTop=0;tabs.children[n].scrollIntoView({block:'nearest',inline:'nearest'});}
+prev.addEventListener('click',()=>show(current-1));next.addEventListener('click',()=>show(current+1));
+let startX=0,startY=0,swipe=false;
+deck.addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.closest('input,select,textarea')){swipe=false;return}swipe=true;startX=e.touches[0].clientX;startY=e.touches[0].clientY},{passive:true});
+deck.addEventListener('touchend',e=>{if(!swipe||!e.changedTouches.length)return;swipe=false;const dx=e.changedTouches[0].clientX-startX,dy=e.changedTouches[0].clientY-startY;
+if(Math.abs(dx)>=65&&Math.abs(dx)>Math.abs(dy)*1.35)show(current+(dx<0?1:-1))},{passive:true});
+const oldHash=location.hash.replace('#','');const initial=oldHash==='wifi'?'wifi':oldHash==='bluetooth'?'bluetooth':oldHash==='infrared'?'tv':oldHash==='privacy'?'settings':oldHash==='device'?'home':oldHash.startsWith('skb-page-')?oldHash.slice(9):'home';show(initial);
+})();
+</script><script>
 async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm'+(n.tracker_candidate?' ['+n.tracker_candidate+']':'')).join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2);pathShieldStatus()}catch(e){el.textContent=String(e)}}
 async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
 async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
