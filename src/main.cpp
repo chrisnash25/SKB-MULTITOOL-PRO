@@ -247,6 +247,8 @@ void sendStatus() {
   server.send(200, "application/json", output);
 }
 
+#include "skb_usb_protocol.h"
+
 void onSerialLine(const String& line) {
   JsonDocument request;
   JsonDocument response;
@@ -255,6 +257,7 @@ void onSerialLine(const String& line) {
     Serial.println("{\"ok\":false,\"error\":\"invalid_json\"}");
     return;
   }
+  if (skbUsbHandle(request,response)) {serializeJson(response,Serial);Serial.println();return;}
   String cmd = request["cmd"] | "";
   if (cmd == "status") {
     response["ok"] = true;
@@ -354,6 +357,7 @@ void inspectStoredIR() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(1000); // USB serial control transport
   auto cfg = M5.config();
   M5.begin(cfg);
   skbPrefs.begin("skb-settings",false);
