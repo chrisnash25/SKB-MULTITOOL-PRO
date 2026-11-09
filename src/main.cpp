@@ -10,6 +10,7 @@
 #include <IRremote.hpp>
 #include <LittleFS.h>
 #include "skb_ir_library.h"
+#include "skb_ir_presets.h"
 
 static WebServer server(80);
 static constexpr uint8_t IR_PIN = 19;
@@ -357,6 +358,7 @@ void setup() {
   skbPrefs.begin("skb-settings",false);
   filesystemReady=LittleFS.begin(true);
   preloadIRRemotes();
+  if(filesystemReady)installBundledIRProfiles();
   IrSender.begin(IR_PIN);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   trackedBleAddress=skbPrefs.getString("ble_target","");
