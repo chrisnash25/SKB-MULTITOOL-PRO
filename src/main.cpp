@@ -11,6 +11,7 @@
 #include <LittleFS.h>
 #include "skb_ir_library.h"
 #include "skb_ir_presets.h"
+#include "skb_ir_monitor_presets.h"
 
 static WebServer server(80);
 static constexpr uint8_t IR_PIN = 19;
@@ -358,7 +359,7 @@ void setup() {
   skbPrefs.begin("skb-settings",false);
   filesystemReady=LittleFS.begin(true);
   preloadIRRemotes();
-  if(filesystemReady)installBundledIRProfiles();
+  if(filesystemReady){installBundledIRProfiles();installMonitorPowerPresets();}
   IrSender.begin(IR_PIN);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   trackedBleAddress=skbPrefs.getString("ble_target","");
@@ -430,13 +431,26 @@ catch(e){status.textContent='Connection failed: '+e.message;}
 <nav class="nav"><a href="#device">System</a><a href="#infrared">Infrared</a><a href="#bluetooth">Bluetooth</a><a href="#privacy">PathShield</a><a href="#wifi">Wi-Fi</a></nav><section id="device" class="panel"><div class="tag"><span class="status-dot"></span>DEVICE / STATUS</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
 <section class="panel" id="ble-advertising"><div class="tag">BLUETOOTH / TX</div><h2>SKB BLE Beacon</h2><p class="muted">Broadcast your own SKB-MULTITOOL-PRO identity. No impersonation or repeated packet flooding.</p><button type="button" onclick="setBleAdvertise(true)">Start advertising</button> <button type="button" onclick="setBleAdvertise(false)">Stop advertising</button><pre id="ble-advertise-status">Checking status...</pre></section>
 <section class="panel" id="ir-presets"><div class="tag">IR LIBRARY</div><h2>Preloaded TV Remotes</h2><p class="muted">Verified Samsung and LG power-toggle commands. Select a file and tap a command. Additional compatible .ir files can be imported.</p><select id="ir-preset-file" style="width:100%;padding:10px;background:#111;color:#eee"></select><button type="button" onclick="loadIRKeys()">Load buttons</button><div id="ir-preset-buttons" class="grid"></div><pre id="ir-preset-status">Loading library...</pre><label>Import a compatible Flipper .ir file (up to 32 KB)<input type="file" id="ir-import-file" accept=".ir,text/plain"></label><button type="button" onclick="importIRFileUI()">Import file</button></section>
+<section id="monitor-power" class="panel"><div class="tag">INFRARED / MONITORS</div><h2>Monitor power controls</h2><p class="muted">Eight model-specific power buttons from your Flipper-IRDB. Point the IR transmitter at your own monitor. Buttons transmit IR; they do not confirm whether the monitor changed state.</p><div id="monitor-power-buttons" class="grid"></div><pre id="monitor-power-status">Eight monitor power profiles ready when storage is mounted.</pre></section>
 <script>
 async function setBleAdvertise(enabled){const el=document.getElementById('ble-advertise-status');try{const r=await fetch('/api/ble/advertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});el.textContent=JSON.stringify(await r.json(),null,2)}catch(e){el.textContent=String(e)}}
 async function bleAdvertiseStatus(){try{document.getElementById('ble-advertise-status').textContent=JSON.stringify(await (await fetch('/api/ble/advertise')).json(),null,2)}catch(e){}}
 async function refreshIRFiles(){const select=document.getElementById('ir-preset-file');const out=document.getElementById('ir-preset-status');try{const r=await fetch('/api/ir/library');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));select.replaceChildren();for(const f of d.files||[]){const opt=document.createElement('option');opt.value=f.name.split('/').pop();opt.textContent=opt.value;select.append(opt)}out.textContent=select.options.length+' remote file(s) ready';await loadIRKeys()}catch(e){out.textContent=String(e)}}
 async function loadIRKeys(){const name=document.getElementById('ir-preset-file').value;const target=document.getElementById('ir-preset-buttons');target.replaceChildren();if(!name)return;try{const r=await fetch('/api/ir/inspect?file='+encodeURIComponent(name));const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));for(const k of d.keys||[]){const button=document.createElement('button');button.textContent=k.name;button.addEventListener('click',async()=>{if(!confirm('Send '+k.name+' to your device using '+name+'?'))return;const out=document.getElementById('ir-preset-status');out.textContent='Transmitting...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:name,key:k.name})});const result=await response.json();out.textContent=result.ok?'IR transmitted; device response not verified':JSON.stringify(result)}catch(e){out.textContent=String(e)}});target.append(button)}}catch(e){document.getElementById('ir-preset-status').textContent=String(e)}}
 async function importIRFileUI(){const file=document.getElementById('ir-import-file').files[0];if(!file)return;const out=document.getElementById('ir-preset-status');if(file.size>32000){out.textContent='File exceeds 32 KB';return}try{const content=await file.text();const r=await fetch('/api/ir/import?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'text/plain'},body:content});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));out.textContent='Imported '+file.name;await refreshIRFiles()}catch(e){out.textContent=String(e)}}
-bleAdvertiseStatus();refreshIRFiles();
+const monitorPowerPresets=[
+['Aorus FV43U','Monitor_Aorus_FV43U.ir'],
+['BenQ EX2780Q','Monitor_BenQ_EX2780Q.ir'],
+['Clinton M-10A','Monitor_Clinton_Electronics_M10A.ir'],
+['LG 43UD79-B','Monitor_LG_43UD79-B.ir'],
+['LG UltraGear OLED','Monitor_LG_UltraGear_OLED.ir'],
+['Loncevon 12-inch','Monitor_Loncevon_12inch.ir'],
+['Monoprice 43305','Monitor_Monoprice_43305.ir'],
+['Philips Evnia 49M2C8900L','Monitor_Philips_Evnia_49M2C8900L.ir']
+];
+function renderMonitorPower(){const target=document.getElementById('monitor-power-buttons');if(!target)return;target.replaceChildren();for(const [label,file] of monitorPowerPresets){const b=document.createElement('button');b.type='button';b.textContent=label+' · Power';b.addEventListener('click',()=>sendMonitorPower(file,label));target.append(b)}}
+async function sendMonitorPower(file,label){if(!confirm('Transmit Power IR to '+label+'?'))return;const el=document.getElementById('monitor-power-status');el.textContent='Sending '+label+' Power...';try{const response=await fetch('/api/ir/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,key:'Power'})});const result=await response.json();el.textContent=response.ok&&result.ok?label+': Power IR transmitted (monitor state unverified)':label+': '+JSON.stringify(result)}catch(e){el.textContent=label+': '+String(e)}}
+renderMonitorPower();bleAdvertiseStatus();refreshIRFiles();
 </script><section id="infrared" class="panel"><div class="tag">INFRARED / TX</div><h2>NEC IR Remote</h2><p class="muted">Send a single NEC command to a device you own. Enter the address and command from its remote specification (decimal values).</p><input id="ir-address" type="number" min="0" max="65535" placeholder="Address (0–65535)"><input id="ir-command" type="number" min="0" max="255" placeholder="Command (0–255)"><button onclick="sendIr()">Transmit</button><pre id="ir-result">Ready</pre></section>
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
