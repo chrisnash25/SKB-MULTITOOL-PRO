@@ -267,6 +267,22 @@ void uploadLogo() {
   }
 }
 
+// Verified against chrisnash25/Flipper-IRDB:
+// TVs/Samsung/Samsung.ir: Samsung32 address 07 00 00 00, command 02 00 00 00
+// TVs/LG/LG.ir: NEC address 04 00 00 00, command 08 00 00 00
+// A single selected brand is transmitted per request; there is no multi-brand broadcast.
+void sendTVPower() {
+ JsonDocument req;
+ if(deserializeJson(req,server.arg("plain")) || !req["confirm"].is<bool>() || !req["confirm"].as<bool>()) {
+  server.send(400,"application/json","{\\"ok\\":false,\\"error\\":\\"confirmation_required\\"}");return;
+ }
+ String brand=req["brand"] | "";
+ if(brand=="Samsung") IrSender.sendSamsung(0x07,0x02,0);
+ else if(brand=="LG") IrSender.sendNEC(0x04,0x08,0);
+ else {server.send(422,"application/json","{\\"ok\\":false,\\"error\\":\\"brand_not_yet_verified\\"}");return;}
+ JsonDocument out;out["ok"]=true;out["brand"]=brand;out["command"]="power_toggle";out["note"]="IR transmission attempted; TV state cannot be verified";String json;serializeJson(out,json);server.send(200,"application/json",json);
+}
+
 void listIRLibrary() {
  JsonDocument doc;doc["ok"]=filesystemReady;JsonArray files=doc["files"].to<JsonArray>();
  if(filesystemReady){File root=LittleFS.open("/ir");if(root){File file=root.openNextFile();while(file){if(!file.isDirectory()&&String(file.name()).endsWith(".ir")){JsonObject item=files.add<JsonObject>();item["name"]=String(file.name());item["bytes"]=file.size();}file=root.openNextFile();}}}
@@ -329,6 +345,7 @@ void setup() {
   bleScanner->setActiveScan(false);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
+  server.on("/api/ir/tv-power", HTTP_POST, sendTVPower);
   server.on("/api/ir/library", HTTP_GET, listIRLibrary);
   server.on("/api/ir/inspect", HTTP_GET, inspectStoredIR);
   server.on("/api/ir/import", HTTP_POST, importIRFile);
@@ -360,7 +377,17 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080809;border:1px so
 a{color:#e46d6d}.nav{display:flex;gap:7px;overflow:auto;padding:0 0 14px}.nav a{flex:none;text-decoration:none;background:linear-gradient(#292929,#111);border:1px solid #594444;border-bottom:2px solid #a12c2c;color:#eee;padding:9px;border-radius:5px;font-size:12px;font-weight:700}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#6aa876;margin-right:5px}
 @media(max-width:360px){.grid{grid-template-columns:1fr}}
-</style><main>
+</style><main><section class="panel" id="tv-power-panel"><h2>TV POWER CONTROL</h2><p class="muted">Select your own TV brand. One power-toggle signal per confirmed press.</p><label for="tv-brand">Verified TV brand</label><select id="tv-brand" style="width:100%;padding:12px;background:#151515;color:white;border:1px solid #794747;border-radius:6px"><option value="Samsung">Samsung</option><option value="LG">LG</option></select><button type="button" id="tv-power-button" style="display:block;width:100%;margin-top:12px">POWER TOGGLE — CONFIRM</button><p id="tv-power-result" role="status" class="muted">No command sent</p></section>
+<script>
+document.getElementById('tv-power-button').addEventListener('click',async()=>{
+const brand=document.getElementById('tv-brand').value;
+if(!confirm('Transmit one IR power-toggle command to your '+brand+' TV?'))return;
+const status=document.getElementById('tv-power-result');status.textContent='Sending…';
+try{const response=await fetch('/api/ir/tv-power',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand,confirm:true})});const data=await response.json();status.textContent=data.ok?'IR sent (TV state not confirmed)':('Error: '+(data.error||response.status));}
+catch(e){status.textContent='Connection failed: '+e.message;}
+});
+</script>
+
 <header class="hero"><img id="skb-emblem" src="data:image/jpeg;base64,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" alt="Original stitched SKB emblem">
 <h1>SKB MULTITOOL PRO</h1><div><label class="muted">Customise emblem · stitched SKB PNG (max 150 KB) <input id="logo-file" type="file" accept="image/png"></label><button onclick="uploadBrandLogo()">Apply logo</button><small id="logo-result"></small></div><div class="tag">HEADLESS CONTROL CONSOLE</div><p class="muted">M5StickC Plus2 / Mobile command centre</p></header>
 <nav class="nav"><a href="#device">System</a><a href="#infrared">Infrared</a><a href="#bluetooth">Bluetooth</a><a href="#privacy">PathShield</a><a href="#wifi">Wi-Fi</a></nav><section id="device" class="panel"><div class="tag"><span class="status-dot"></span>DEVICE / STATUS</div><h2>System status</h2><pre id="status">Connecting...</pre><button onclick="statusNow()">Refresh</button></section>
