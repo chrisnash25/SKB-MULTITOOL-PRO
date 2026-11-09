@@ -1,5 +1,17 @@
 #include "FlipperIR.h"
 #include <stdlib.h>
+static uint64_t flipperHex(const String& value, bool& ok) {
+  String digits;
+  for (unsigned i=0; i<value.length(); ++i) {
+    char c=value[i];
+    if (c==' ' || c=='\t') continue;
+    if (!isxdigit(static_cast<unsigned char>(c)) || digits.length()>=16) { ok=false; return 0; }
+    digits += c;
+  }
+  if (digits.isEmpty() || (digits.length()%2)!=0) {ok=false;return 0;}
+  ok=true;
+  return strtoull(digits.c_str(),nullptr,16);
+}
 static String valueOf(const String& s) { int p=s.indexOf(':'); if(p<0)return ""; String v=s.substring(p+1);v.trim();return v; }
 bool parseFlipperIR(fs::FS& fs,const String& path,std::vector<IRCommand>& out,String& error){
  out.clear();
@@ -25,8 +37,8 @@ bool parseFlipperIR(fs::FS& fs,const String& path,std::vector<IRCommand>& out,St
   } else if(!active)continue;
   else if(key=="type"){cur.raw=(v=="raw");hasType=(v=="raw"||v=="parsed");if(!hasType){error="unsupported_type";f.close();return false;}}
   else if(key=="protocol")cur.protocol=v;
-  else if(key=="address")cur.address=strtoull(v.c_str(),nullptr,0);
-  else if(key=="command")cur.command=strtoull(v.c_str(),nullptr,0);
+  else if(key=="address"){bool ok=false;cur.address=flipperHex(v,ok);if(!ok){error="invalid_address";f.close();return false;}}
+  else if(key=="command"){bool ok=false;cur.command=flipperHex(v,ok);if(!ok){error="invalid_command";f.close();return false;}}
   else if(key=="frequency"){long hz=v.toInt();if(hz<20000||hz>60000){error="invalid_frequency";f.close();return false;}cur.frequency=hz;}
   else if(key=="data"){
    char* end=nullptr;const char* p=v.c_str();
