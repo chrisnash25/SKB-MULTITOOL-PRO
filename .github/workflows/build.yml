@@ -2,7 +2,7 @@ name: Build firmware
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'feature/tactical-ir-library']
 jobs:
   build:
     runs-on: ubuntu-latest
