@@ -32,7 +32,7 @@ void sendPathShieldStatus() {
   doc["mode"] = "ble_candidate_classification";
   doc["candidate_count"] = trackerCandidatesLastScan;
   doc["alert"] = trackerAlert;
-  doc["note"] = "BLE candidate classification is available; persistence scoring and alerts remain pending";
+  doc["note"] = "Candidate counts are informational, not proof of unwanted tracking.";
   String json; serializeJson(doc, json);
   server.send(200, "application/json", json);
 }
@@ -165,6 +165,8 @@ void scanBle() {
   if (foundTracked) tracking["rssi"] = trackedBleRssi;
   tracking["last_seen_uptime_ms"] = trackedBleLastSeenMs;
   tracking["note"] = "Not seen does not guarantee departure; BLE addresses may rotate.";
+  doc["pathshield_candidates"] = trackerCandidatesLastScan;
+  doc["pathshield_alert"] = trackerAlert;
   String json;
   serializeJson(doc,json);
   bleScanner->clearResults();
@@ -252,11 +254,12 @@ void uploadLogo() {
   HTTPUpload& upload=server.upload();
   if (!filesystemReady) return;
   if (upload.status==UPLOAD_FILE_START) {
+    if (logoUploadFile) logoUploadFile.close();
     if (upload.filename.endsWith(".png") || upload.filename.endsWith(".PNG")) {
       logoUploadFile=LittleFS.open("/logo.png","w");
     }
   } else if (upload.status==UPLOAD_FILE_WRITE) {
-    if (logoUploadFile && upload.totalSize+upload.currentSize<=150000) logoUploadFile.write(upload.buf,upload.currentSize);
+    if (logoUploadFile && upload.totalSize<=150000 && upload.currentSize<=150000-upload.totalSize) logoUploadFile.write(upload.buf,upload.currentSize);
   } else if (upload.status==UPLOAD_FILE_END || upload.status==UPLOAD_FILE_ABORTED) {
     if (logoUploadFile) logoUploadFile.close();
     if (upload.status==UPLOAD_FILE_ABORTED || upload.totalSize>150000) LittleFS.remove("/logo.png");
@@ -316,12 +319,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#a9dcf7}a{c
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
-<section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification during discovery. Persistence scoring and alerts are pending.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
+<section class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification and last-scan counts. These are not proof of unwanted tracking.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
-async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm').join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2)}catch(e){el.textContent=String(e)}}
+async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm'+(n.tracker_candidate?' ['+n.tracker_candidate+']':'')).join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2);pathShieldStatus()}catch(e){el.textContent=String(e)}}
 async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
 async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
 async function loadBleTarget(){try{const d=await (await fetch('/api/ble/tracking')).json();document.getElementById('ble-target').value=d.address||'';document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){}}
