@@ -10,6 +10,8 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.hardware.usb.UsbInterface;
+import com.hoho.android.usbserial.driver.ProbeTable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -54,7 +56,7 @@ public final class MainActivity extends Activity {
             if (PERMISSION_ACTION.equals(action)) {
                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
                 if (granted && pendingDriver != null) openSerial(pendingDriver);
-                else setStatus("USB permission denied");
+                else setStatus("USB permission denied — reconnect and approve");
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 if (device != null && usbConnection != null) {
@@ -90,6 +92,7 @@ public final class MainActivity extends Activity {
         connect.setText("CONNECT USB");
         connect.setTextSize(11);
         connect.setOnClickListener(v -> connectUsb());
+        connect.setOnLongClickListener(v -> {diagnostics(listUsbDevices());return true;});
         bar.addView(connect, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 54));
         root.addView(bar);
 
@@ -141,25 +144,74 @@ public final class MainActivity extends Activity {
         evaluate("window.skbReply && window.skbReply(" + JSONObject.quote(line) + ");");
     }
 
-    private void connectUsb() {
-        if(port != null){ disconnect(); setStatus("USB: disconnected"); return; }
-        List<UsbSerialDriver> drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager);
-        if(drivers.isEmpty()){
-            // The StickC Plus2 CH9102 is normally recognised as CDC ACM.
-            for(UsbDevice d : usbManager.getDeviceList().values()){
-                if(d.getVendorId()==0x1a86){drivers.add(new CdcAcmSerialDriver(d));}
+    private static final int WCH_VENDOR_ID = 0x1a86;
+    private static final int CH9102F_PRODUCT_ID = 0x55d4;
+
+    private String listUsbDevices() {
+        StringBuilder info = new StringBuilder();
+        for (UsbDevice d : usbManager.getDeviceList().values()) {
+            if(info.length()>0)info.append(" | ");
+            info.append(String.format(java.util.Locale.US,"%04X:%04X",d.getVendorId(),d.getProductId()));
+            info.append(" interfaces=").append(d.getInterfaceCount());
+            info.append(" permission=").append(usbManager.hasPermission(d) ? "yes" : "no");
+            for(int i=0;i<d.getInterfaceCount();i++) {
+                UsbInterface face=d.getInterface(i);
+                info.append(" [").append(face.getInterfaceClass()).append(":").append(face.getInterfaceSubclass()).append("]");
             }
         }
-        if(drivers.isEmpty()){setStatus("No USB serial device found — connect your OTG cable");return;}
+        return info.length()==0 ? "Android sees no USB devices" : info.toString();
+    }
+
+    private void diagnostics(String message) {
+        setStatus(message);
+        evaluate("window.skbUsbDiagnostics && window.skbUsbDiagnostics(" + JSONObject.quote(message) + ");");
+    }
+
+    private void connectUsb() {
+        if (port != null) {
+            disconnect();
+            diagnostics("USB disconnected");
+            return;
+        }
+
+        // Default matcher handles CDC interfaces, CH340, FTDI, CP210x, etc.
+        // Explicit CH9102F vendor/product recognition avoids devices with
+        // unusual interface descriptors being omitted by the default prober.
+        List<UsbSerialDriver> drivers = new ArrayList<>(
+            UsbSerialProber.getDefaultProber().findAllDrivers(usbManager));
+        UsbDevice ch9102 = null;
+        for (UsbDevice d : usbManager.getDeviceList().values()) {
+            if(d.getVendorId()==WCH_VENDOR_ID && d.getProductId()==CH9102F_PRODUCT_ID) {
+                ch9102=d;
+                break;
+            }
+        }
+        if (ch9102 != null) {
+            UsbSerialDriver explicit = new CdcAcmSerialDriver(ch9102);
+            drivers.removeIf(d -> d.getDevice().getDeviceId() == ch9102.getDeviceId());
+            drivers.add(0, explicit);
+        }
+        if (drivers.isEmpty()) {
+            diagnostics("No supported serial driver. " + listUsbDevices());
+            return;
+        }
         UsbSerialDriver selected=drivers.get(0);
-        for(UsbSerialDriver d:drivers) if(d.getDevice().getVendorId()==0x1a86){selected=d;break;}
+        for(UsbSerialDriver d:drivers) {
+            if(d.getDevice().getVendorId()==WCH_VENDOR_ID) {
+                selected=d;break;
+            }
+        }
         pendingDriver=selected;
-        if(usbManager.hasPermission(selected.getDevice())) openSerial(selected);
-        else{
-            setStatus("Approve Android USB access");
+        UsbDevice device=selected.getDevice();
+        String deviceText=String.format(java.util.Locale.US,"USB %04X:%04X",device.getVendorId(),device.getProductId());
+        if (usbManager.hasPermission(device)) {
+            diagnostics(deviceText+" detected; opening");
+            openSerial(selected);
+        } else {
+            diagnostics(deviceText+" detected; grant USB permission");
             Intent permission = new Intent(PERMISSION_ACTION).setPackage(getPackageName());
             PendingIntent pi=PendingIntent.getBroadcast(this,0,permission,PendingIntent.FLAG_MUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
-            usbManager.requestPermission(selected.getDevice(),pi);
+            usbManager.requestPermission(device,pi);
         }
     }
 
@@ -171,13 +223,15 @@ public final class MainActivity extends Activity {
             UsbSerialPort p=driver.getPorts().get(0);
             p.open(usbConnection);
             p.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            p.setDTR(true);
+            p.setRTS(true);
             port=p;
             listening=true;
-            setStatus("USB: connected • 115200 baud");
+            diagnostics("USB connected • "+String.format(java.util.Locale.US,"%04X:%04X",driver.getDevice().getVendorId(),driver.getDevice().getProductId())+" • 115200");
             evaluate("window.skbConnected && window.skbConnected(true);");
             readThread=new Thread(this::readLoop,"skb-usb-read");
             readThread.start();
-        } catch(Exception e){disconnect();setStatus("USB error: "+e.getMessage());}
+        } catch(Exception e){disconnect();diagnostics("USB open failed: "+e.getMessage()+" | "+listUsbDevices());}
     }
 
     private void readLoop(){
@@ -212,6 +266,7 @@ public final class MainActivity extends Activity {
 
     public final class UsbCommands {
         @JavascriptInterface public boolean isConnected(){return port!=null;}
+        @JavascriptInterface public String listDevices(){return listUsbDevices();}
         @JavascriptInterface public void command(String raw){
             writer.execute(()->{
                 int id=-1;
