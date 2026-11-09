@@ -82,7 +82,8 @@ void wifiResults() {
       entry["rssi"] = WiFi.RSSI(i);
       entry["channel"] = WiFi.channel(i);
     }
-    serializeJson(signalDoc,cachedSignalJson = String());
+    cachedSignalJson = "";
+    serializeJson(signalDoc,cachedSignalJson);
     WiFi.scanDelete();
   }
   doc["ok"] = true;
