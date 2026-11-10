@@ -23,6 +23,8 @@ inline bool valid(const Pins& p) {
   }
   // On original ESP32 GPIO34-39 are input-only and cannot drive SPI signals.
   if(p.sck>=34 || p.mosi>=34 || p.csn>=34) return false;
+  // Pins 6-11 connect to the ESP32 flash and must never be reassigned.
+  for(const int pin : required) if(pin>=6 && pin<=11) return false;
   if(p.control>=34) return false; // nRF24 CE must be output-capable.
   if(p.irq>=0) {
     if(p.irq>39) return false;
