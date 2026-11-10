@@ -8,12 +8,14 @@
 // modules configured for the 433 MHz band. Never strobes STX.
 // The RF/power/antenna configuration still requires physical verification.
 namespace MamboRadio {
-inline void observeCc1101(JsonDocument& out,const String& mode) {
+inline void observeCc1101(JsonDocument& out,const String& mode,int startKhz=433050,int count=8,int stepKhz=100) {
   out["ok"]=false;
   out["mode"]=mode;
   out["transmission_enabled"]=false;
   out["measurement"]="RSSI_dBm_estimate";
   if(mode!="cc1101") {out["error"]="cc1101_only";return;}
+  if(count<1 || count>16 || stepKhz<25 || stepKhz>500 || startKhz<433050 ||
+     startKhz+(count-1)*stepKhz>434790) {out["error"]="invalid_433mhz_scan_range";return;}
 #ifndef MAMBO_RADIO_HW_VERIFIED
   out["error"]="hardware_monitor_disabled";
   out["reason"]="Verified GPIO/power profile required";
@@ -50,27 +52,38 @@ inline void observeCc1101(JsonDocument& out,const String& mode) {
     out["error"]="cc1101_not_detected";
     SPI.endTransaction();SPI.end();return;
   }
-  // Force idle, select 26 MHz crystal 433.92 MHz frequency word 0x10B071.
-  // A full RF calibration/profile is required for trustworthy RSSI.
-  strobe(0x36); // SIDLE
-  writeReg(0x0d,0x10);writeReg(0x0e,0xb0);writeReg(0x0f,0x71);
-  writeReg(0x18,0x18); // MCSM0 auto-calibrate when leaving IDLE
-  strobe(0x34);        // SRX, receive only
-  delay(4);
-  const uint8_t marcstate=readStatus(0x35)&0x1f;
-  const uint8_t raw=readStatus(0x34);
-  strobe(0x36);        // SIDLE, no TX
-  SPI.endTransaction();SPI.end();
-  out["marcstate"]=marcstate;
-  if(marcstate!=0x0d) {
-    out["error"]="receiver_not_in_rx";
-    return;
+  // Limited 433.05–434.79 MHz receive-only scan (26 MHz CC1101 crystal).
+  // RSSI offset is approximate and has not been calibrated for this board.
+  writeReg(0x18,0x18); // MCSM0, auto-calibrate when leaving IDLE
+  JsonArray bins=out["observations"].to<JsonArray>();
+  int validSamples=0;
+  for(int i=0;i<count;i++) {
+    const int frequencyKhz=startKhz+i*stepKhz;
+    const uint32_t frequencyWord=(uint32_t)(((uint64_t)frequencyKhz*1000ULL*65536ULL)/26000000ULL);
+    strobe(0x36); // SIDLE
+    writeReg(0x0d,(uint8_t)((frequencyWord>>16)&0xff));
+    writeReg(0x0e,(uint8_t)((frequencyWord>>8)&0xff));
+    writeReg(0x0f,(uint8_t)(frequencyWord&0xff));
+    strobe(0x34); // SRX: never STX
+    delay(4);
+    const uint8_t marcstate=readStatus(0x35)&0x1f;
+    const uint8_t raw=readStatus(0x34);
+    strobe(0x36);
+    JsonObject row=bins.add<JsonObject>();
+    row["frequency_mhz"]=frequencyKhz/1000.0f;
+    if(marcstate==0x0d) {
+      const int signedRssi=raw>=128?(int)raw-256:(int)raw;
+      row["power_dbm"]=signedRssi/2.0f-74.0f;
+      validSamples++;
+    } else row["status"]="receiver_not_in_rx";
   }
-  const int signedRssi=raw>=128?((int)raw-256):(int)raw;
-  out["ok"]=true;
-  out["frequency_mhz"]=433.92;
-  out["rssi_dbm_estimate"]=signedRssi/2.0f-74.0f;
-  out["note"]="Single-frequency estimate only; no calibrated sweep or packet decoding";
+  SPI.endTransaction();SPI.end();
+  out["ok"]=validSamples>0;
+  out["samples"]=validSamples;
+  out["requested"]=count;
+  if(!validSamples)out["error"]="receiver_not_in_rx";
+  out["note"]="Approximate RSSI values; only 433 MHz band; no packet decoding";
+
 #endif
 }
 } // namespace MamboRadio
