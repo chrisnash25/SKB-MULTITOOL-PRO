@@ -6,4 +6,4 @@ android {
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
-dependencies { implementation 'com.github.mik3y:usb-serial-for-android:3.9.0' }
+dependencies { implementation 'com.github.mik3y:usb-serial-for-android:3.11.0' }
