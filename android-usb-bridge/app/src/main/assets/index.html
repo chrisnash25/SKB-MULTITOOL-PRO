@@ -47,6 +47,10 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div class="panel"><h3>DISCOVERY</h3><button class="red" id="scanBle">SCAN BLE DEVICES</button><pre id="bleState">Tap Scan BLE.</pre></div>
 <div class="panel"><h3>TRACK ONE OF YOUR DEVICES</h3><label for="bleAddress">BLE address (AA:BB:CC:DD:EE:FF)</label><input id="bleAddress" placeholder="AA:BB:CC:DD:EE:FF"><div class="grid"><button id="saveBle">SAVE TARGET</button><button id="clearBle">CLEAR TARGET</button></div><pre id="trackState">No target configured.</pre></div>
 </section>
+<section class="page" data-title="BLE HID"><h2>BLE Keyboard / Manual macros</h2>
+<div class="panel"><h3>PAIRING / RECONNECTION</h3><p class="muted">Pair once in your own device's Bluetooth settings with SKB BLE Keyboard. Reconnection is automatic when allowed. Macros only run after pressing RUN.</p><button id="hidStatus">CHECK BLE KEYBOARD</button><pre id="hidState">Check pairing status.</pre></div>
+<div class="panel"><h3>SELECT MACRO</h3><select id="hidSelect"></select><button id="hidLoad">REVIEW SELECTED</button><label>Macro name<input id="hidName" maxlength="20" placeholder="MyMacro"></label><label>Plain text macro (up to 160 characters)<textarea id="hidText" maxlength="160" placeholder="Example text to type"></textarea></label>
+<div class="grid"><button id="hidSave">SAVE</button><button id="hidDelete">DELETE</button><button class="red" id="hidRun">RUN SELECTED</button><button id="hidStop">STOP</button></div><pre id="hidResult">Select a saved macro to send, only after pairing.</pre></div></section>
 <section class="page" data-title="SETTINGS"><h2>Settings and imports</h2>
 <div class="panel"><h3>PATHSHIELD</h3><p class="muted">Classifies BLE candidates for manual review. Not proof of unwanted tracking.</p><div class="grid"><button id="pathOn">ENABLE</button><button id="pathOff">DISABLE</button></div><button id="pathGet">REFRESH</button><pre id="pathState">Not checked.</pre></div>
 <div class="panel"><h3>IMPORT FLIPPER .IR FILE</h3><label for="irName">Filename (letters, digits, underscores, dash)</label><input id="irName" value="CustomRemote.ir"><label for="irText">Flipper IR file text</label><textarea id="irText" placeholder="Filetype: IR signals file&#10;Version: 1&#10;..."></textarea><button id="importIr" class="red">IMPORT TO M5STICK</button><pre id="importState">No file uploaded.</pre></div>
@@ -115,6 +119,15 @@ for(let i=0;i<body.length;i+=180){const chunk=body.slice(i,i+180);await rpc('usb
 const r=await rpc('usb_ir_import_end');setText('importState',r);await refreshRemotes();
 }catch(e){setText('importState','Upload failed: '+uiError(e));try{await rpc('usb_ir_import_abort')}catch(ignored){}}
 };
+async function hidRpc(action,params={}){return rpc('usb_badble',{action,...params})}
+async function hidRefresh(){const d=await run('hidState','usb_badble',{action:'status'});if(d){setText('hidState',d.connected?'BLE HID connected: ready to run selected text':'Not connected. Pair SKB BLE Keyboard on your host; reconnect is automatic.');}}
+async function hidList(){const d=await run('hidResult','usb_badble',{action:'list'});if(!d)return;const sel=$('hidSelect');sel.replaceChildren();for(const m of d.macros){const option=document.createElement('option');option.value=m.name;option.textContent=m.name;option.dataset.text=m.text;sel.append(option);}setText('hidResult',d.macros.length+' saved macros');}
+$('hidStatus').onclick=hidRefresh;
+$('hidLoad').onclick=()=>{const opt=$('hidSelect').selectedOptions[0];if(!opt)return;$('hidName').value=opt.value;$('hidText').value=opt.dataset.text;};
+$('hidSave').onclick=async()=>{const d=await run('hidResult','usb_badble',{action:'save',name:$('hidName').value,text:$('hidText').value});if(d)hidList();};
+$('hidDelete').onclick=async()=>{const d=await run('hidResult','usb_badble',{action:'delete',name:$('hidSelect').value});if(d)hidList();};
+$('hidRun').onclick=()=>run('hidResult','usb_badble',{action:'run',name:$('hidSelect').value});
+$('hidStop').onclick=()=>run('hidResult','usb_badble',{action:'stop'});
 show(0);
 if(window.SKB&&SKB.isConnected())window.skbConnected(true);
 </script></body></html>
