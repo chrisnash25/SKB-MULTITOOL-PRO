@@ -89,6 +89,16 @@ class MamboIntegrationTests(unittest.TestCase):
     def test_radio_gpio_flash_pins_excluded(self):
         self.assertIn('pin>=6 && pin<=11',self.radio)
 
+    def test_owner_pinmap_and_boot_guard(self):
+        pins=(ROOT / "include/mambo_radio_pinmap.h").read_text()
+        probe=(ROOT / "include/mambo_radio_probe.h").read_text()
+        expected={"CSN":26,"SCK":0,"MOSI":32,"MISO":33,"CONTROL":25}
+        for name,value in expected.items():
+            self.assertIn(f"#define MAMBO_RADIO_PIN_{name} {value}",pins)
+        self.assertIn("MAMBO_GPIO0_BOOT_VERIFIED",pins)
+        self.assertIn('#include "mambo_radio_pinmap.h"',probe)
+        self.assertNotIn("-D MAMBO_RADIO_HW_VERIFIED", (ROOT / "platformio.ini").read_text())
+
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
         self.assertIn("actions/upload-artifact", self.workflow)
