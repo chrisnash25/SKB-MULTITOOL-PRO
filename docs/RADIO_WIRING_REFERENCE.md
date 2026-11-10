@@ -12,3 +12,6 @@ Never connect either radio chip directly to 5 V VCC. Verify PA/LNA module board 
 Pin mapping remains UNVERIFIED. Do not activate `MamboRadio::Monitor::begin` until an explicit, checked mapping for shared SCK/MISO/MOSI, separate CC1101 CSN, separate nRF24 CSN and CE, and power is available. Consider a GPIO expander or alternative interface where exposed GPIO is insufficient.
 
 For CC1101, frequency monitoring and packet diagnostics are separate from transmitting. For rolling-code systems, support only offline/synthetic format diagnostics and authorized bench testing.
+
+## Module form factor confirmation
+User confirms **both modules have eight-pin headers**. This does not establish identical physical ordering or power requirements. Functional signal mapping for a standard nRF24L01+ is GND, 3.3V VCC, CE, CSN, SCK, MOSI, MISO, IRQ; compare each board's printed silkscreen before connecting. CC1101 GDO0/GDO2 are not interchangeable with nRF24 CE/IRQ. Both chip-select lines must be independent.
