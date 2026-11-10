@@ -13,8 +13,6 @@
 #include "skb_ir_presets.h"
 #include "skb_ir_monitor_presets.h"
 
-#include "skb_badble.h"
-
 static WebServer server(80);
 static constexpr uint8_t IR_PIN = 19;
 static bool filesystemReady = false;
@@ -32,6 +30,8 @@ static unsigned int trackerCandidatesLastScan = 0;
 static String trackerAlert = "No BLE scan yet";
 static unsigned long pathShieldEnabledSince = 0;
 
+
+#include "skb_badble.h"
 
 void bleAdvertisementControl() {
  if(server.method()==HTTP_POST) {server.send(409,"application/json",R"({"ok":false,"error":"BLE_HID_keyboard_owns_advertising","hint":"BLE HID pairing runs automatically"})");return;}
