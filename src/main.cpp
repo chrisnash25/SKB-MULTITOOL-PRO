@@ -14,7 +14,49 @@
 #include "skb_ir_presets.h"
 #include "skb_ir_monitor_presets.h"
 
+#include "mambo_radio_lab.h"
 static WebServer server(80);
+static String mamboRadioMode = "none";
+static void mamboRadioStatus() {
+  JsonDocument d;
+  d["ok"]=true;
+  d["product"]="Mambo OS V3";
+  d["selected_mode"]=mamboRadioMode;
+  d["hardware_detected"]=false;
+  d["hardware_detection"]="unavailable_until_gpio_mapping_verified";
+  d["cc1101"]["ready"]=false;
+  d["nrf24"]["ready"]=false;
+  d["transmission_enabled"]=false;
+  d["note"]="Single interchangeable module; switch off power before changing radio.";
+  String out;serializeJson(d,out);server.send(200,"application/json",out);
+}
+static void mamboRadioSelect() {
+  JsonDocument request;
+  if(deserializeJson(request,server.arg("plain"))) {server.send(400,"application/json",R"({"ok":false,"error":"invalid_json"})");return;}
+  String mode=request["mode"] | "";
+  if(mode!="none" && mode!="cc1101" && mode!="nrf24") {server.send(400,"application/json",R"({"ok":false,"error":"invalid_mode"})");return;}
+  mamboRadioMode=mode;
+  mamboRadioStatus();
+}
+static void mamboSubInspect() {
+  if(server.arg("plain").length()>8192) {server.send(413,"application/json",R"({"ok":false,"error":"file_too_large"})");return;}
+  String body=server.arg("plain");
+  if(!body.startsWith("Filetype: Flipper SubGhz")) {server.send(400,"application/json",R"({"ok":false,"error":"unsupported_sub_header"})");return;}
+  JsonDocument d;d["ok"]=true;d["type"]="sub_metadata_preview";d["transmission_enabled"]=false;
+  const char* keys[]={"Version","Frequency","Preset","Protocol","Bit"};
+  for(const char* key:keys) {
+    String prefix=String(key)+": ";
+    int pos=body.indexOf("\\n"+prefix);
+    if(pos<0 && body.startsWith(prefix))pos=-1;
+    if(pos>=0)pos+=1;else if(!body.startsWith(prefix))continue;else pos=0;
+    int start=pos+prefix.length();int end=body.indexOf('\\n',start);if(end<0)end=body.length();
+    String value=body.substring(start,end);value.trim();
+    if(value.length()>100)value=value.substring(0,100);
+    d[key]=value;
+  }
+  String out;serializeJson(d,out);server.send(200,"application/json",out);
+}
+
 static constexpr uint8_t IR_PIN = 19;
 static bool filesystemReady = false;
 static File logoUploadFile;
@@ -388,6 +430,9 @@ void setup() {
   bleAdvertiser=BLEDevice::getAdvertising();
   bleAdvertiser->setScanResponse(true);
   server.on("/api/status", HTTP_GET, sendStatus);
+  server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
+  server.on("/api/mambo/radio", HTTP_POST, mamboRadioSelect);
+  server.on("/api/mambo/sub/inspect", HTTP_POST, mamboSubInspect);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
   server.on("/api/ir/tv-power", HTTP_POST, sendTVPower);
   server.on("/api/ir/library", HTTP_GET, listIRLibrary);
@@ -521,7 +566,7 @@ refresh();})();
 </script></main><script>
 (()=>{
 const host=document.querySelector('main');if(!host)return;
-const specs=[['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['badble','BLE KEYBOARD'],['settings','SETTINGS']];
+const specs=[['radio','RADIO LAB'],['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['badble','BLE KEYBOARD'],['settings','SETTINGS']];
 const containers={};
 const deck=document.createElement('div');deck.className='skb-pages';deck.id='skb-pages';
 const tabs=document.createElement('nav');tabs.className='skb-tabs';tabs.setAttribute('aria-label','Dashboard pages');
@@ -529,6 +574,14 @@ const footer=document.createElement('div');footer.className='skb-pager';
 for(const [id,title] of specs){const pg=document.createElement('section');pg.className='skb-page';pg.id='skb-page-'+id;pg.setAttribute('aria-label',title);
 const head=document.createElement('div');head.className='skb-page-title';const strong=document.createElement('strong');strong.textContent=title;const hint=document.createElement('span');hint.textContent='SWIPE LEFT / RIGHT';head.append(strong,hint);pg.append(head);containers[id]=pg;deck.append(pg);
 const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.dataset.page=id;tab.setAttribute('aria-controls',pg.id);tab.addEventListener('click',()=>show(id));tabs.append(tab)}
+const radioPanel=document.createElement('article');
+radioPanel.innerHTML='<h2>Mambo OS V3 · Radio Lab</h2><p>One interchangeable 8-pin radio at a time. Switch off the M5StickC Plus2 before changing modules.</p><label>Selected module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 Sub-GHz</option><option value="nrf24">nRF24 2.4 GHz</option></select></label> <button id="mambo-set">Set mode</button> <button id="mambo-refresh">Refresh</button><pre id="mambo-status"></pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">Inspect</button><pre id="mambo-sub-result"></pre><p>RF scanning and transmission remain unavailable until the module wiring and hardware are validated. Rolling-code support is limited to offline diagnostics.</p>';
+containers.radio.append(radioPanel);
+async function mamboRefresh(){try{const r=await fetch('/api/mambo/radio');const d=await r.json();document.getElementById('mambo-status').textContent=JSON.stringify(d,null,2);document.getElementById('mambo-mode').value=d.selected_mode||'none'}catch(e){document.getElementById('mambo-status').textContent=String(e)}}
+document.getElementById('mambo-refresh').onclick=mamboRefresh;
+document.getElementById('mambo-set').onclick=async()=>{await fetch('/api/mambo/radio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:document.getElementById('mambo-mode').value})});mamboRefresh()};
+document.getElementById('mambo-inspect').onclick=async()=>{const file=document.getElementById('mambo-sub').files[0];if(!file)return;const output=document.getElementById('mambo-sub-result');if(file.size>8192){output.textContent='Maximum 8 KB';return}try{const r=await fetch('/api/mambo/sub/inspect',{method:'POST',headers:{'Content-Type':'text/plain'},body:await file.text()});output.textContent=JSON.stringify(await r.json(),null,2)}catch(e){output.textContent=String(e)}};
+mamboRefresh();
 const original=Array.from(host.children);
 for(const node of original){
 if(node.tagName==='SCRIPT')continue;
