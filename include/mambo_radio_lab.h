@@ -21,6 +21,9 @@ inline bool valid(const Pins& p) {
     if(required[i]<0 || required[i]>39) return false;
     for(int j=0;j<i;j++) if(required[i]==required[j]) return false;
   }
+  // On original ESP32 GPIO34-39 are input-only and cannot drive SPI signals.
+  if(p.sck>=34 || p.mosi>=34 || p.csn>=34) return false;
+  if(p.control>=34) return false; // nRF24 CE must be output-capable.
   if(p.irq>=0) {
     if(p.irq>39) return false;
     for(int i=0;i<5;i++) if(p.irq==required[i]) return false;
