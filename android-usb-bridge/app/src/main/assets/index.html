@@ -205,7 +205,7 @@ document.querySelectorAll('[data-goto]').forEach(x=>x.onclick=()=>show(+x.datase
 window.skbPrevPage=()=>show(page-1);
 let sx=0,sy=0,swipe=false;
 $('pages').addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.closest('input,textarea,select')){swipe=false;return}swipe=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
-$('pages').addEventListener('touchend',e=>{if(!swipe)return;swipe=false;let dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.35)show(page+(dx<0?1:-1))},{passive:true});
+$('pages').addEventListener('touchend',e=>{if(!swipe)return;swipe=false;let dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(!e.target.closest('.tv-shell,.theme-picker,#remoteMatches')&&Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.35)show(page+(dx<0?1:-1))},{passive:true});
 function setText(id,s){$(id).textContent=typeof s==='string'?s:JSON.stringify(s,null,2);}
 function uiError(e){return String(e.message||e)}
 window.skbConnected=on=>{connected=!!on;$('connection').innerHTML='<span class="dot '+(connected?'on':'')+'">●</span> USB '+(connected?'CONNECTED':'DISCONNECTED');$('welcome').textContent=connected?'USB connected. Your phone Wi-Fi remains available.':'Press CONNECT USB above, then allow Android USB access.';if(connected){rpc('usb_hello').then(x=>setText('status',x)).catch(e=>setText('status',uiError(e)));refreshHealth();}};
@@ -262,7 +262,7 @@ function renderRemoteMatches(){
  const list=$('remoteMatches');list.replaceChildren();
  for(const item of matches.slice(0,80)){
   const b=document.createElement('button');b.type='button';
-  b.textContent=item.name.replace(/_/g,' ').replace(/\\.ir$/i,'');
+  b.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');
   b.classList.toggle('selected',$('remoteSelect').value===item.name);
   b.onclick=()=>{$('remoteSelect').value=item.name;loadRemote()};
   list.append(b);
@@ -275,7 +275,7 @@ async function refreshRemotes(){
  const previous=$('remoteSelect').value||tvFile;
  remoteFiles=(r.files||[]).filter(x=>!x.name.startsWith('Monitor_')).sort((a,b)=>a.name.localeCompare(b.name));
  $('remoteSelect').replaceChildren();
- for(const item of remoteFiles){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\\.ir$/i,'');$('remoteSelect').append(opt)}
+ for(const item of remoteFiles){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');$('remoteSelect').append(opt)}
  if(remoteFiles.some(x=>x.name===previous))$('remoteSelect').value=previous;
  renderRemoteMatches();
  setText('irState',remoteFiles.length+' stored remotes. Search by name and tap one to load.');
@@ -284,8 +284,8 @@ $('loadRemote').onclick=loadRemote;
 async function loadRemote(){const file=$('remoteSelect').value;if(!file)return;const r=await run('irState','usb_ir_keys',{file});if(!r)return;tvFile=file;tvKeys=r.keys||[];$('tvActiveName').textContent=file.replace(/_/g,' ').replace(/\.ir$/,'');$('tvStage').classList.add('active');$('tvSelector').classList.remove('open');const target=$('remoteButtons');target.replaceChildren();const used=new Set(Object.keys(keyAliases).map(matchTvKey).filter(Boolean));for(const item of tvKeys){if(used.has(item.name))continue;const b=document.createElement('button');b.textContent=item.name.replaceAll('_',' ');b.onclick=()=>run('irState','usb_ir_send',{file,key:item.name});target.append(b);}setText('irState',tvKeys.length+' keys loaded · '+file+' · tap controls to transmit');renderRemoteMatches();}
 document.querySelectorAll('[data-tvbrand]').forEach(b=>b.onclick=()=>run('irState','usb_ir_tv_power',{brand:b.dataset.tvbrand}));
 $('scanWifi').onclick=()=>run('wifiState','usb_wifi_scan');
-$('wifiResults').onclick=async()=>{const r=await run('wifiState','usb_wifi_results');const list=$('wifiList');list.replaceChildren();if(!r||!r.networks)return;for(const ap of r.networks){const row=document.createElement('div');row.className='panel';row.textContent=(ap.ssid||'(hidden)')+' · '+ap.rssi+' dBm · CH '+ap.channel;list.append(row);}};
-$('scanBle').onclick=()=>run('bleState','usb_ble_scan');
+$('wifiResults').onclick=async()=>{const r=await run('wifiState','usb_wifi_results');const list=$('wifiList');list.replaceChildren();if(!r||!r.networks)return;for(const ap of r.networks){const row=document.createElement('div');row.className='panel';row.textContent=(ap.ssid||'(hidden)')+' · '+ap.rssi+' dBm · CH '+ap.channel+' · '+(ap.bssid||'')+' · Security '+(ap.encryption===undefined?'unknown':ap.encryption);list.append(row);}};
+$('scanBle').onclick=async()=>{const r=await run('bleState','usb_ble_scan');if(!r||!r.devices)return;const lines=r.devices.map(d=>(d.name||'Unnamed')+' · '+d.address+' · '+d.rssi+' dBm'+(d.service_uuid?' · Service '+d.service_uuid:'')+(d.manufacturer_data_bytes?' · Manufacturer bytes '+d.manufacturer_data_bytes:''));setText('bleState',lines.length?lines.join('\\n'):'No BLE advertisements found');};
 $('beaconOn').onclick=()=>run('beaconState','usb_ble_advertise',{enabled:true});
 $('beaconOff').onclick=()=>run('beaconState','usb_ble_advertise',{enabled:false});
 $('saveBle').onclick=()=>run('trackState','usb_ble_tracking',{address:$('bleAddress').value});
