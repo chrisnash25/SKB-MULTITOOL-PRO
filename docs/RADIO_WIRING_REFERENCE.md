@@ -15,3 +15,6 @@ For CC1101, frequency monitoring and packet diagnostics are separate from transm
 
 ## Module form factor confirmation
 User confirms **both modules have eight-pin headers**. This does not establish identical physical ordering or power requirements. Functional signal mapping for a standard nRF24L01+ is GND, 3.3V VCC, CE, CSN, SCK, MOSI, MISO, IRQ; compare each board's printed silkscreen before connecting. CC1101 GDO0/GDO2 are not interchangeable with nRF24 CE/IRQ. Both chip-select lines must be independent.
+
+## Revised requirement: interchangeable single-radio operation
+The user confirms that CC1101 and nRF24 modules will **not** be connected simultaneously. Design one expansion connector with a selectable CC1101 mode or nRF24 mode; power down before swapping. Shared SPI SCK/MISO/MOSI and CSN can be reused. Pin 3 changes role between CC1101 GDO0 (input/status) and nRF24 CE (output/control); pin 8 changes between CC1101 GDO2 and nRF24 IRQ. Firmware must configure these pins for the selected module and never assume the same electrical direction. The physical orientation must still be checked against each board's labels. The earlier dual-connected SPI design is superseded by this single-radio interchangeable requirement.
