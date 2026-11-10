@@ -11,6 +11,7 @@ class MamboIntegrationTests(unittest.TestCase):
         cls.main = (ROOT / "src/main.cpp").read_text()
         cls.radio = (ROOT / "include/mambo_radio_lab.h").read_text()
         cls.diagnostics = (ROOT / "include/mambo_radio_diagnostics.h").read_text()
+        cls.probe = (ROOT / "include/mambo_radio_probe.h").read_text()
         cls.android = (ROOT / "android/app/src/main/java/uk/skb/mambo/MainActivity.java").read_text()
         cls.workflow = (ROOT / ".github/workflows/mambo-v3-validation.yml").read_text()
 
@@ -58,6 +59,15 @@ class MamboIntegrationTests(unittest.TestCase):
                        'power_dbm', 'row.detected===true', 'rows.length>512',
                        'OFFLINE IMPORT ONLY'):
             self.assertIn(marker,self.main)
+
+    def test_probe_is_explicitly_disabled_by_default(self):
+        self.assertIn('#ifndef MAMBO_RADIO_HW_VERIFIED', self.probe)
+        self.assertIn('out["error"]="hardware_probe_disabled"',self.probe)
+        self.assertIn('out["transmission_enabled"]=false',self.probe)
+        self.assertIn('MamboRadio::probeReadOnly(response,mamboRadioMode)',self.main)
+        self.assertIn('server.on("/api/mambo/probe", HTTP_POST',self.main)
+        self.assertIn('mambo-probe',self.main)
+        self.assertIn('radio_probe',self.android)
 
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
