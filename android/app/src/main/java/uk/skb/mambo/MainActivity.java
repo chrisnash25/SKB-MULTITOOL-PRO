@@ -81,6 +81,8 @@ public class MainActivity extends Activity {
     Button status=new Button(this);status.setText("USB device status");layout.addView(status);
     Button radio=new Button(this);radio.setText("USB radio diagnostics");layout.addView(radio);
     Button probe=new Button(this);probe.setText("Read-only SPI probe (USB)");layout.addView(probe);
+    Button nrf=new Button(this);nrf.setText("nRF24 channel activity (USB)");layout.addView(nrf);
+    Button cc=new Button(this);cc.setText("CC1101 RSSI (USB)");layout.addView(cc);
     radioMode=new Spinner(this);
     radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
     layout.addView(radioMode);
@@ -101,6 +103,8 @@ public class MainActivity extends Activity {
     status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
     radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
     probe.setOnClickListener(v->send("{\"cmd\":\"radio_probe\"}"));
+    nrf.setOnClickListener(v->send("{\"cmd\":\"radio_observe\",\"start_channel\":0,\"count\":8}"));
+    cc.setOnClickListener(v->send("{\"cmd\":\"cc1101_rssi\"}"));
     selectRadio.setOnClickListener(v->{
       try {JSONObject cmd=new JSONObject();cmd.put("cmd","radio_select");cmd.put("mode",radioMode.getSelectedItem().toString());send(cmd.toString());}
       catch(Exception e){announce("Invalid radio selection");}
