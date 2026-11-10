@@ -65,7 +65,7 @@ inline bool skbUsbHandle(JsonDocument& req,JsonDocument& res){
  else if(cmd=="usb_wifi_results"){
   int n=WiFi.scanComplete();if(n==WIFI_SCAN_RUNNING){res["state"]="scanning";if(millis()-scanStarted>15000){WiFi.scanDelete();wifiScanning=false;skbUsbReplyError(res,"scan_timeout");}}
   else if(n<0){res["state"]="idle";wifiScanning=false;}
-  else{res["state"]="complete";wifiScanning=false;JsonArray arr=res["networks"].to<JsonArray>();for(int i=0;i<n&&i<64;i++){JsonObject a=arr.add<JsonObject>();a["ssid"]=WiFi.SSID(i);a["rssi"]=WiFi.RSSI(i);a["channel"]=WiFi.channel(i);a["bssid"]=WiFi.BSSIDstr(i);}WiFi.scanDelete();}
+  else{res["state"]="complete";wifiScanning=false;JsonArray arr=res["networks"].to<JsonArray>();for(int i=0;i<n&&i<64;i++){JsonObject a=arr.add<JsonObject>();a["ssid"]=WiFi.SSID(i);a["rssi"]=WiFi.RSSI(i);a["channel"]=WiFi.channel(i);a["bssid"]=WiFi.BSSIDstr(i);a["encryption"]=static_cast<int>(WiFi.encryptionType(i));}WiFi.scanDelete();}
  }
  else if(cmd=="usb_badble"){
   skbBadBleCommand(req,res);
@@ -77,7 +77,7 @@ inline bool skbUsbHandle(JsonDocument& req,JsonDocument& res){
    JsonArray devices=res["devices"].to<JsonArray>();int n=scan.getCount();unsigned candidates=0;bool tracked=false;
    for(int i=0;i<n&&i<40;i++){
     BLEAdvertisedDevice d=scan.getDevice(i);JsonObject item=devices.add<JsonObject>();String addr=String(d.getAddress().toString().c_str());
-    item["address"]=addr;item["rssi"]=d.getRSSI();if(d.haveName())item["name"]=String(d.getName().c_str());
+    item["address"]=addr;item["rssi"]=d.getRSSI();if(d.haveName())item["name"]=String(d.getName().c_str());if(d.haveManufacturerData())item["manufacturer_data_bytes"]=d.getManufacturerData().length();if(d.haveServiceUUID())item["service_uuid"]=String(d.getServiceUUID().toString().c_str());
     if(trackedBleAddress.length()&&addr.equalsIgnoreCase(trackedBleAddress)){tracked=true;trackedBleRssi=d.getRSSI();trackedBleLastSeenMs=millis();}
     if(pathShieldEnabled&&d.haveManufacturerData()){item["tracker_candidate"]="manufacturer data present; not definitive";candidates++;}
    }
@@ -95,7 +95,7 @@ inline bool skbUsbHandle(JsonDocument& req,JsonDocument& res){
    String addr=req["address"].as<String>();addr.trim();if(addr.length()&&(addr.length()!=17||addr.charAt(2)!=':'||addr.charAt(5)!=':'||addr.charAt(8)!=':'||addr.charAt(11)!=':'||addr.charAt(14)!=':'))skbUsbReplyError(res,"invalid_ble_address");
    else {trackedBleAddress=addr;trackedBleSeen=false;skbPrefs.putString("ble_target",addr);}
   }
-  res["address"]=trackedBleAddress;res["seen_this_scan"]=trackedBleSeen;res["rssi"]=trackedBleRssi;
+  res["address"]=trackedBleAddress;res["seen_this_scan"]=trackedBleSeen;res["rssi"]=trackedBleRssi;res["last_seen_uptime_ms"]=trackedBleLastSeenMs;
  }
  else if(cmd=="usb_pathshield"){
   if(req["enabled"].is<bool>()){pathShieldEnabled=req["enabled"].as<bool>();skbPrefs.putBool("pathshield",pathShieldEnabled);pathShieldEnabledSince=millis();}
