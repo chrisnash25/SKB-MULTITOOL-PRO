@@ -17,6 +17,7 @@
 #include "mambo_radio_lab.h"
 #include "mambo_radio_diagnostics.h"
 #include "mambo_radio_probe.h"
+#include "mambo_radio_observe.h"
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
@@ -320,6 +321,10 @@ void onSerialLine(const String& line) {
     MamboRadio::fillDiagnostics(response,mamboRadioMode);
   } else if (cmd == "radio_probe") {
     MamboRadio::probeReadOnly(response,mamboRadioMode);
+  } else if (cmd == "radio_observe") {
+    const int start=request["start_channel"] | 0;
+    const int count=request["count"] | 8;
+    MamboRadio::observeChannels(response,mamboRadioMode,start,count);
   } else if (cmd == "radio_select") {
     String mode=request["mode"] | "";
     if(mode=="none" || mode=="cc1101" || mode=="nrf24") {
@@ -454,6 +459,15 @@ void setup() {
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
   server.on("/api/mambo/diagnostics", HTTP_GET, mamboRadioStatus);
+  server.on("/api/mambo/observe", HTTP_POST, []() {
+    JsonDocument req,d;
+    if(deserializeJson(req,server.arg("plain"))) {server.send(400,"application/json",R"({"ok":false,"error":"invalid_json"})");return;}
+    const int start=req["start_channel"] | 0;
+    const int count=req["count"] | 8;
+    MamboRadio::observeChannels(d,mamboRadioMode,start,count);
+    String out;serializeJson(d,out);
+    server.send(d["ok"].as<bool>()?200:422,"application/json",out);
+  });
   server.on("/api/mambo/probe", HTTP_POST, []() {
     JsonDocument d;MamboRadio::probeReadOnly(d,mamboRadioMode);
     String out;serializeJson(d,out);
