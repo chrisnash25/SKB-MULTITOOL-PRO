@@ -1,0 +1,23 @@
+name: Mambo OS V3 integration validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/mambo-os-dual-radio]
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: python -m pip install platformio
+      - name: Validate firmware
+        run: pio run -e m5stick-cplus2
+      - name: Publish firmware binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: mambo-v3-firmware
+          path: .pio/build/m5stick-cplus2/*.bin
+          if-no-files-found: error
