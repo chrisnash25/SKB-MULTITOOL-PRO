@@ -18,6 +18,9 @@ import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
+import android.webkit.ValueCallback;
+import android.net.Uri;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -48,6 +51,8 @@ public final class MainActivity extends Activity {
     private TextView status;
     private UsbSerialDriver pendingDriver;
     private boolean pageLoaded;
+    private static final int PICK_IR_FILE=9213;
+    private ValueCallback<Uri[]> pendingFilePicker;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -103,6 +108,25 @@ public final class MainActivity extends Activity {
         web.getSettings().setAllowFileAccessFromFileURLs(false);
         web.getSettings().setAllowUniversalAccessFromFileURLs(false);
         web.addJavascriptInterface(new UsbCommands(), "SKB");
+        web.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if(pendingFilePicker!=null)pendingFilePicker.onReceiveValue(null);
+                pendingFilePicker=callback;
+                try {
+                    Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    pick.setType("*/*");
+                    pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(pick,PICK_IR_FILE);
+                    return true;
+                } catch(Exception e) {
+                    pendingFilePicker=null;
+                    callback.onReceiveValue(null);
+                    setStatus("IR file picker failed: "+e.getMessage());
+                    return true;
+                }
+            }
+        });
+
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageFinished(WebView view, String url) {
                 pageLoaded=true;
@@ -123,6 +147,16 @@ public final class MainActivity extends Activity {
         else registerReceiver(receiver, filter);
         // The device may already be connected when the app is launched.
         if(!usbManager.getDeviceList().isEmpty()) connectUsb();
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==PICK_IR_FILE && pendingFilePicker!=null){
+            Uri[] selected=(resultCode==RESULT_OK && data!=null && data.getData()!=null)
+                ? new Uri[]{data.getData()} : null;
+            pendingFilePicker.onReceiveValue(selected);
+            pendingFilePicker=null;
+        }
     }
 
     @Override protected void onNewIntent(Intent intent) {
