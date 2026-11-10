@@ -6,6 +6,8 @@ on:
     paths:
       - 'android/**'
       - '.github/workflows/mambo-v3-android.yml'
+permissions:
+  contents: read
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -19,12 +21,28 @@ jobs:
         with:
           gradle-version: '8.9'
       - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
+      - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Build debug APK
+      - name: Diagnose Android Gradle environment
         working-directory: android
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          java -version
+          gradle --version
+          gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath --stacktrace
+      - name: Build debug APK with full diagnostics
+        working-directory: android
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace --info :app:assembleDebug 2>&1 | tee ../mambo-android-build.log
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mambo-v3-android-build-log
+          path: mambo-android-build.log
+          if-no-files-found: ignore
       - name: Upload companion APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: mambo-os-v3-companion-debug-apk
