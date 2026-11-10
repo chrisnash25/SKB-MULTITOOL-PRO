@@ -25,19 +25,21 @@ jobs:
         run: |
           set -euo pipefail
           echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
-          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::Android cmdline-tools sdkmanager not found at $SDK_ROOT"
+            exit 1
           fi
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          echo "sdk.dir=$SDK_ROOT" > android/local.properties
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses < /dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
       - name: Diagnose Android Gradle environment
         working-directory: android
         run: |
           java -version
           gradle --version
-          gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath --stacktrace
+          gradle --no-daemon :app:dependencies --configuration debugRuntimeClasspath --stacktrace 2>&1 | tee ../mambo-android-dependencies.log
       - name: Build debug APK with full diagnostics
         working-directory: android
         run: |
@@ -48,7 +50,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mambo-v3-android-build-log
-          path: mambo-android-build.log
+          path: |
+            mambo-android-build.log
+            mambo-android-dependencies.log
           if-no-files-found: ignore
       - name: Upload companion APK
         if: success()
