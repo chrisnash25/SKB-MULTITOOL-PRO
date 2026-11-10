@@ -79,13 +79,14 @@ public class MainActivity extends Activity {
     usbStatus=new TextView(this);usbStatus.setTextColor(Color.WHITE);usbStatus.setPadding(16,12,16,12);usbStatus.setText("USB not connected");layout.addView(usbStatus);
     Button usb=new Button(this);usb.setText("Connect USB / request permission");layout.addView(usb);
     Button status=new Button(this);status.setText("USB device status");layout.addView(status);
-    Button radio=new Button(this);radio.setText("USB radio status");layout.addView(radio);
+    Button radio=new Button(this);radio.setText("USB radio diagnostics");layout.addView(radio);
     radioMode=new Spinner(this);
     radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
     layout.addView(radioMode);
     Button selectRadio=new Button(this);selectRadio.setText("Set selected radio (USB)");layout.addView(selectRadio);
     deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);
     deviceResponse.setPadding(16,10,16,10);deviceResponse.setText("No USB response yet");
+    deviceResponse.setTextIsSelectable(true);
     layout.addView(deviceResponse);
     Button wifi=new Button(this);wifi.setText("Open Wi-Fi dashboard");layout.addView(wifi);
     web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
