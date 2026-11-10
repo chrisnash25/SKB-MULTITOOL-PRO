@@ -36,7 +36,35 @@ Both modules must have correctly regulated **3.3 V**, never 5 V on the radio VCC
 
 **Before enabling hardware probing:** map the depicted M5StickC Plus2 GPIO routing into a documented, safe pin configuration and check the 3.3 V current budget. The owner's same-order socket confirmation applies to their actual two boards; it does not validate power delivery or a GPIO that the ESP32 cannot output on. This does not require an SD card, transistor or external controller.
 
-## Additional pinout reference supplied by owner (10 November 2026)
-Gemini share: https://share.gemini.google/VPJnJaUOttgy
+## Exact GPIO map from owner-uploaded screenshot (10 November 2026)
 
-**Verification status:** The share link could not be read by the build assistant. Its wiring and GPIO values have not been extracted or checked. Do not set `MAMBO_RADIO_HW_VERIFIED` or assign SPI pins from this inaccessible source. A directly uploaded screenshot or the text pin-to-pin mapping is required for electrical validation.
+The owner supplied an image titled **CC1101 Standalone Pinout Map**. The screenshot specifies these direct electrical connections:
+
+| Shared eight-position socket signal | M5StickC Plus2 / ESP32 GPIO |
+|---|---|
+| VCC | 3V3 only |
+| GND | GND |
+| CSN / CS | GPIO26 |
+| SCK / CLK | GPIO0 |
+| MOSI / SI | GPIO32 |
+| MISO / SO | GPIO33 |
+| CC1101 GDO0 / nRF24 CE | GPIO25 |
+| CC1101 GDO2 / nRF24 IRQ | Not connected (optional) |
+
+The user confirms both particular radio boards have matching 8-pin ordering, and that only one radio is attached at a time.
+
+**ESP32 GPIO0 boot warning:** GPIO0 is a strapping pin, sampled during reset. Using it for SCK can disrupt normal boot or flashing if the connected radio board forces an incompatible level. GPIO0 is an output-capable GPIO after boot, but it is not a universally safe SPI clock pin at reset.
+
+**Board/power warning:** The screenshot shows signal assignments; it does not independently establish that these M5StickC Plus2 pads are all physically available, that GPIO25/32/33 are not used internally by the specific unit, that a PA/LNA radio's peak power is within the board's 3.3V budget, or that GPIO0 is safe with the actual wiring. Do not enable a radio profile based solely on this diagram without these checks.
+
+### Corresponding firmware build flags (not enabled in default builds)
+
+```ini
+-D MAMBO_RADIO_PIN_CSN=26
+-D MAMBO_RADIO_PIN_SCK=0
+-D MAMBO_RADIO_PIN_MOSI=32
+-D MAMBO_RADIO_PIN_MISO=33
+-D MAMBO_RADIO_PIN_CONTROL=25
+```
+
+`MAMBO_RADIO_HW_VERIFIED` is deliberately omitted from the normal build. A dedicated validated build can add it once the power, boot and physical pin checks have been completed. GPIO0 cannot be assumed boot-safe simply because these assignments appear in a screenshot.
