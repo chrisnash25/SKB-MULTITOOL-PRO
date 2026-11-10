@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     Button usb=new Button(this);usb.setText("Connect USB / request permission");layout.addView(usb);
     Button status=new Button(this);status.setText("USB device status");layout.addView(status);
     Button radio=new Button(this);radio.setText("USB radio diagnostics");layout.addView(radio);
+    Button probe=new Button(this);probe.setText("Read-only SPI probe (USB)");layout.addView(probe);
     radioMode=new Spinner(this);
     radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
     layout.addView(radioMode);
@@ -99,6 +100,7 @@ public class MainActivity extends Activity {
     usb.setOnClickListener(v->discover(true));
     status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
     radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
+    probe.setOnClickListener(v->send("{\"cmd\":\"radio_probe\"}"));
     selectRadio.setOnClickListener(v->{
       try {JSONObject cmd=new JSONObject();cmd.put("cmd","radio_select");cmd.put("mode",radioMode.getSelectedItem().toString());send(cmd.toString());}
       catch(Exception e){announce("Invalid radio selection");}
