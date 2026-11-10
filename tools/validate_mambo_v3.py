@@ -69,6 +69,26 @@ class MamboIntegrationTests(unittest.TestCase):
         self.assertIn('mambo-probe',self.main)
         self.assertIn('radio_probe',self.android)
 
+    def test_receive_only_monitor_paths(self):
+        self.assertIn('server.on("/api/mambo/observe", HTTP_POST',self.main)
+        self.assertIn('server.on("/api/mambo/cc1101/rssi", HTTP_GET',self.main)
+        self.assertIn('MamboRadio::observeChannels(response,mamboRadioMode',self.main)
+        self.assertIn('MamboRadio::observeCc1101(response,mamboRadioMode)',self.main)
+        self.assertIn('radio_observe',self.android)
+        self.assertIn('cc1101_rssi',self.android)
+        nrf=(ROOT / "include/mambo_radio_observe.h").read_text()
+        cc=(ROOT / "include/mambo_cc1101_observe.h").read_text()
+        for module in (nrf,cc):
+            self.assertIn('#ifndef MAMBO_RADIO_HW_VERIFIED',module)
+            self.assertIn('out["transmission_enabled"]=false',module)
+            self.assertNotIn('0xA0',module) # no nRF TX payload command
+        self.assertIn('firstChannel+count>126',nrf)
+        self.assertIn('strobe(0x34)',cc) # SRX only
+        self.assertNotIn('strobe(0x35)',cc) # no STX strobe
+
+    def test_radio_gpio_flash_pins_excluded(self):
+        self.assertIn('pin>=6 && pin<=11',self.radio)
+
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
         self.assertIn("actions/upload-artifact", self.workflow)
