@@ -486,7 +486,7 @@ renderMonitorPower();bleAdvertiseStatus();refreshIRFiles();
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section id="bluetooth" class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
 <section class="panel" id="badble"><div class="tag">BLE HID / MANUAL MACROS</div><h2>SKB BLE Keyboard</h2>
-<p class="muted">Pair once with your own phone or PC. The keyboard advertises and reconnects automatically when the host permits it. Text macros NEVER run on connection; select one and press RUN.</p>
+<p class="muted">Pair once with SKB BLE HID on your own phone or PC. The keyboard advertises and reconnects automatically when the host permits it. Text macros NEVER run on connection; select one and press RUN.</p>
 <button onclick="skbHidStatus()">CHECK PAIRING</button><pre id="skb-hid-status">Checking...</pre>
 <label>Saved macro <select id="skb-hid-select" style="width:100%;padding:11px;background:#171717;color:white"></select></label>
 <button onclick="skbHidLoad()">LOAD / REVIEW</button>
