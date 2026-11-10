@@ -23,7 +23,8 @@ static void mamboRadioStatus() {
   d["product"]="Mambo OS V3";
   d["selected_mode"]=mamboRadioMode;
   d["hardware_detected"]=false;
-  d["hardware_detection"]="unavailable_until_gpio_mapping_verified";
+  d["hardware_detection"]="disabled_until_verified_gpio_mapping";
+  d["connection"]="software_only";
   d["cc1101"]["ready"]=false;
   d["nrf24"]["ready"]=false;
   d["transmission_enabled"]=false;
@@ -36,6 +37,7 @@ static void mamboRadioSelect() {
   String mode=request["mode"] | "";
   if(mode!="none" && mode!="cc1101" && mode!="nrf24") {server.send(400,"application/json",R"({"ok":false,"error":"invalid_mode"})");return;}
   mamboRadioMode=mode;
+  skbPrefs.putString("mambo_radio",mode);
   mamboRadioStatus();
 }
 static void mamboSubInspect() {
@@ -317,15 +319,21 @@ void onSerialLine(const String& line) {
     response["uptime_ms"] = millis();
     response["free_heap"] = ESP.getFreeHeap();
     response["battery_voltage"] = M5.Power.getBatteryVoltage();
+    response["protocol"]="mambo-usb-v1";
+    response["radio_mode"]=mamboRadioMode;
+    response["hardware_detected"]=false;
   } else if (cmd == "radio_status") {
     response["ok"]=true;
     response["selected_mode"]=mamboRadioMode;
     response["hardware_detected"]=false;
+    response["detection_state"]="disabled_until_verified_gpio_mapping";
+    response["transmission_enabled"]=false;
     response["note"]="Radio GPIO mapping not validated";
   } else if (cmd == "radio_select") {
     String mode=request["mode"] | "";
     if(mode=="none" || mode=="cc1101" || mode=="nrf24") {
       mamboRadioMode=mode;
+      skbPrefs.putString("mambo_radio",mode);
       response["ok"]=true;
       response["selected_mode"]=mamboRadioMode;
     } else {
@@ -434,6 +442,8 @@ void setup() {
   IrSender.begin(IR_PIN);
   pathShieldEnabled=skbPrefs.getBool("pathshield",false);
   trackedBleAddress=skbPrefs.getString("ble_target","");
+  mamboRadioMode=skbPrefs.getString("mambo_radio","none");
+  if(mamboRadioMode!="none" && mamboRadioMode!="cc1101" && mamboRadioMode!="nrf24")mamboRadioMode="none";
   // Headless-first: no screen interaction required.
   M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
