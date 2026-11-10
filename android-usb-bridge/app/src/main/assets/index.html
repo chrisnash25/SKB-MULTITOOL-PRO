@@ -40,6 +40,13 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 .tv-popup.open{display:block}
 .tv-popup button{margin-top:8px}
 .tv-shell .remote-label{position:absolute;color:#d0c7c0;font-size:clamp(10px,3vw,18px);font-weight:700;text-align:center;pointer-events:none}
+
+/* Actual supplied SKB remote artwork with transparent aligned touch hitboxes. */
+.tv-shell{width:min(100%,410px);aspect-ratio:2/3;border:0;border-radius:0;box-shadow:none;background-size:100% 100%;background-position:center;background-repeat:no-repeat}
+.tv-shell .tv-logo,.tv-shell .remote-label{display:none}
+.tv-shell button,.tv-shell button.round,.tv-shell button.dpad,.tv-shell button.cmd{background:transparent!important;border:0!important;border-radius:12px;box-shadow:none!important;color:transparent!important;font-size:0!important;outline:none}
+.tv-shell button:active{background:rgba(255,255,255,.2)!important;transform:none}
+.tv-shell button:focus-visible{outline:2px solid #ff8090}
 </style></head><body>
 <header class="head"><div class="brand">SKB <em>◆</em> PRO</div><div class="sub">USB OTG CONTROL CONSOLE · M5STICKC PLUS2</div></header>
 <div class="connection"><span id="connection"><span class="dot">●</span> USB DISCONNECTED</span><span>115200 · SERIAL</span></div>
@@ -58,27 +65,27 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div id="tvStage" class="tv-stage">
 <div class="tv-shell" aria-label="SKB metallic TV remote">
 <div class="tv-logo"><strong>SKB</strong><small>MADE BY</small><small>CHRIS NASH</small></div>
-<button class="round dpad" style="left:37%;top:33%;width:26%;height:10%" data-tvkey="up" aria-label="Up">▲</button>
-<button class="round dpad" style="left:23%;top:38%;width:18%;height:11%" data-tvkey="left" aria-label="Left">◀</button>
-<button class="round dpad" style="left:59%;top:38%;width:18%;height:11%" data-tvkey="right" aria-label="Right">▶</button>
-<button class="round dpad" style="left:37%;top:48%;width:26%;height:10%" data-tvkey="down" aria-label="Down">▼</button>
-<button class="round" style="left:42%;top:40%;width:16%;height:11%" data-tvkey="ok">OK</button>
-<button style="left:10%;top:49%;width:22%;height:8%" data-tvkey="volumeup" aria-label="Volume up">+</button>
+<button class="round dpad" style="left:43%;top:34%;width:14%;height:5%" data-tvkey="up" aria-label="Up">▲</button>
+<button class="round dpad" style="left:34%;top:40%;width:9%;height:8%" data-tvkey="left" aria-label="Left">◀</button>
+<button class="round dpad" style="left:59%;top:40%;width:9%;height:8%" data-tvkey="right" aria-label="Right">▶</button>
+<button class="round dpad" style="left:43%;top:48%;width:14%;height:5%" data-tvkey="down" aria-label="Down">▼</button>
+<button class="round" style="left:44%;top:40%;width:12%;height:8%" data-tvkey="ok">OK</button>
+<button style="left:22%;top:49%;width:12%;height:7%" data-tvkey="volumeup" aria-label="Volume up">+</button>
 <div class="remote-label" style="left:10%;top:57%;width:22%">VOL</div>
-<button style="left:10%;top:62%;width:22%;height:8%" data-tvkey="volumedown" aria-label="Volume down">−</button>
-<button style="left:68%;top:49%;width:22%;height:8%" data-tvkey="channelup" aria-label="Channel up">⌃</button>
+<button style="left:22%;top:60%;width:12%;height:7%" data-tvkey="volumedown" aria-label="Volume down">−</button>
+<button style="left:69%;top:49%;width:12%;height:7%" data-tvkey="channelup" aria-label="Channel up">⌃</button>
 <div class="remote-label" style="left:68%;top:57%;width:22%">CH</div>
-<button style="left:68%;top:62%;width:22%;height:8%" data-tvkey="channeldown" aria-label="Channel down">⌄</button>
-<button class="cmd" style="left:9%;top:75%;width:20%;height:10%" data-tvkey="source">⇥</button>
-<button class="cmd" style="left:31%;top:75%;width:20%;height:10%" data-tvkey="settings">⚙</button>
-<button class="cmd" style="left:53%;top:75%;width:20%;height:10%" data-tvkey="menu">☰</button>
-<button class="cmd" style="left:75%;top:75%;width:20%;height:10%" id="tvSearchRemote">⌕</button>
+<button style="left:69%;top:60%;width:12%;height:7%" data-tvkey="channeldown" aria-label="Channel down">⌄</button>
+<button class="cmd" style="left:20%;top:70%;width:14%;height:9%" data-tvkey="source">⇥</button>
+<button class="cmd" style="left:36%;top:70%;width:14%;height:9%" data-tvkey="settings">⚙</button>
+<button class="cmd" style="left:51%;top:70%;width:14%;height:9%" data-tvkey="menu">☰</button>
+<button class="cmd" style="left:67%;top:70%;width:14%;height:9%" id="tvSearchRemote">⌕</button>
 <div class="remote-label" style="left:9%;top:87%;width:20%">SOURCE</div>
 <div class="remote-label" style="left:31%;top:87%;width:20%">SETTINGS</div>
 <div class="remote-label" style="left:53%;top:87%;width:20%">MENU</div>
 <div class="remote-label" style="left:75%;top:87%;width:20%">SEARCH</div>
-<button class="cmd" style="left:39%;top:59%;width:22%;height:10%" data-tvkey="back">BACK</button>
-<button class="round" style="left:79%;top:28%;width:13%;height:8%;font-size:17px;background:linear-gradient(#df8190,#a52e46)" data-tvkey="power">⏻</button>
+<button class="cmd" style="left:42%;top:54%;width:16%;height:8%" data-tvkey="back">BACK</button>
+<button class="round" style="left:77%;top:26%;width:13%;height:7%" data-tvkey="power">⏻</button>
 </div></div>
 <pre id="irState">Select a remote from your library to begin.</pre>
 <div class="panel"><h3>OTHER KEYS ON THIS REMOTE</h3><div id="remoteButtons" class="remote"></div><p class="muted">If a key isn't included in the selected IR profile, the remote tells you rather than sending an unrelated command. Some IR protocols need firmware support.</p></div>
@@ -104,9 +111,11 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div class="panel"><h3>USB DIAGNOSTICS</h3><button id="ping">USB HANDSHAKE</button><button id="usbDevices">SHOW ANDROID USB DEVICES</button><p class="muted">Long-press CONNECT USB at the top to view detected hardware. CH9102F is normally 1A86:55D4.</p><pre id="diagnostics">Ready</pre></div>
 </section></main>
 <footer class="pager"><button id="prev">◀ PREV</button><span id="pageLabel">HOME · 1 / 6</span><button id="next">NEXT ▶</button></footer>
+<script src="remote_image.js"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
+if(window.SKB_REMOTE_IMAGE)document.querySelector('.tv-shell').style.backgroundImage='url("'+window.SKB_REMOTE_IMAGE+'")';
 let page=0,serial=1,connected=false;
 const titles=Array.from(document.querySelectorAll('.page')).map(x=>x.dataset.title);
 const pending=new Map();
