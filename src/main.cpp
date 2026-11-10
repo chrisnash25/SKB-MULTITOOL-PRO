@@ -15,23 +15,16 @@
 #include "skb_ir_monitor_presets.h"
 
 #include "mambo_radio_lab.h"
+#include "mambo_radio_diagnostics.h"
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
 static void mamboRadioStatus() {
   JsonDocument d;
-  d["ok"]=true;
-  d["product"]="Mambo OS V3";
-  d["selected_mode"]=mamboRadioMode;
-  d["hardware_detected"]=false;
-  d["hardware_detection"]="disabled_until_verified_gpio_mapping";
-  d["connection"]="software_only";
-  d["cc1101"]["ready"]=false;
-  d["nrf24"]["ready"]=false;
-  d["transmission_enabled"]=false;
-  d["note"]="Single interchangeable module; switch off power before changing radio.";
+  MamboRadio::fillDiagnostics(d,mamboRadioMode);
   String out;serializeJson(d,out);server.send(200,"application/json",out);
 }
+
 static void mamboRadioSelect() {
   JsonDocument request;
   if(deserializeJson(request,server.arg("plain"))) {server.send(400,"application/json",R"({"ok":false,"error":"invalid_json"})");return;}
@@ -323,12 +316,7 @@ void onSerialLine(const String& line) {
     response["radio_mode"]=mamboRadioMode;
     response["hardware_detected"]=false;
   } else if (cmd == "radio_status") {
-    response["ok"]=true;
-    response["selected_mode"]=mamboRadioMode;
-    response["hardware_detected"]=false;
-    response["detection_state"]="disabled_until_verified_gpio_mapping";
-    response["transmission_enabled"]=false;
-    response["note"]="Radio GPIO mapping not validated";
+    MamboRadio::fillDiagnostics(response,mamboRadioMode);
   } else if (cmd == "radio_select") {
     String mode=request["mode"] | "";
     if(mode=="none" || mode=="cc1101" || mode=="nrf24") {
@@ -462,6 +450,7 @@ void setup() {
   bleAdvertiser->setScanResponse(true);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
+  server.on("/api/mambo/diagnostics", HTTP_GET, mamboRadioStatus);
   server.on("/api/mambo/radio", HTTP_POST, mamboRadioSelect);
   server.on("/api/mambo/sub/inspect", HTTP_POST, mamboSubInspect);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
