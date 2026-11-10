@@ -22,7 +22,7 @@ The supplied illustration depicts a **CC1101 with shared SPI** and other optiona
 | 8 | GDO2 |
 
 ### Standard nRF24L01+ logical signals
-GND, VCC 3.3 V, CE, CSN, SCK, MOSI, MISO, IRQ. The **physical header order and orientation depend on the actual breakout**. Pin 3 (CC1101 GDO0 versus nRF CE) changes between input and output, and optional pin 8 serves different functions. Do not assume identical PCB pin orders from the fact that both have eight pins.
+GND, VCC 3.3 V, CE, CSN, SCK, MOSI, MISO, IRQ. **Owner confirms their two specific modules use the same physical eight-pin header order and orientation.** Pin 3 (CC1101 GDO0 versus nRF CE) changes between input and output, and pin 8 serves different functions. The shared socket is designed for these two confirmed module boards, not arbitrary CC1101/nRF24 breakout models.
 
 ## Firmware behaviour
 - A single selected radio mode, persisted in preferences. Swapping radios requires power-down and selecting the new mode when back on.
@@ -34,4 +34,4 @@ GND, VCC 3.3 V, CE, CSN, SCK, MOSI, MISO, IRQ. The **physical header order and o
 ## Power and verification
 Both modules must have correctly regulated **3.3 V**, never 5 V on the radio VCC. PA/LNA high-power boards may require more supply current than an M5StickC Plus2 pin can safely deliver. Direct connection without extra parts depends on the exact modules, their peak current requirements, and available IO pins.
 
-**Before enabling hardware probing:** verify the individual module silkscreen/orientation, pin routing from the M5StickC Plus2, and 3.3 V current budget. This does not require an SD card, transistor or external controller.
+**Before enabling hardware probing:** map the depicted M5StickC Plus2 GPIO routing into a documented, safe pin configuration and check the 3.3 V current budget. The owner's same-order socket confirmation applies to their actual two boards; it does not validate power delivery or a GPIO that the ESP32 cannot output on. This does not require an SD card, transistor or external controller.
