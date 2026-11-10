@@ -67,6 +67,9 @@ inline bool skbUsbHandle(JsonDocument& req,JsonDocument& res){
   else if(n<0){res["state"]="idle";wifiScanning=false;}
   else{res["state"]="complete";wifiScanning=false;JsonArray arr=res["networks"].to<JsonArray>();for(int i=0;i<n&&i<64;i++){JsonObject a=arr.add<JsonObject>();a["ssid"]=WiFi.SSID(i);a["rssi"]=WiFi.RSSI(i);a["channel"]=WiFi.channel(i);a["bssid"]=WiFi.BSSIDstr(i);}WiFi.scanDelete();}
  }
+ else if(cmd=="usb_badble"){
+  skbBadBleCommand(req,res);
+ }
  else if(cmd=="usb_ble_scan"){
   if(!bleScanner)skbUsbReplyError(res,"ble_not_ready");
   else{
