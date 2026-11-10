@@ -86,6 +86,23 @@ body[data-theme=hacker]{--accent:#17caa4;--accent2:#8cffb7;--panel:#0a201b;--lin
 body[data-theme=hidden]{--accent:#696c70;--accent2:#a8aaad;--panel:#101112;--line:#303134}
 body[data-theme=hidden] .sub{opacity:.4}
 @media(max-height:700px){.head{padding:4px 9px}.sub{display:none}.connection{margin:2px 8px}.tabs{padding:3px 6px}.pager{padding:3px 8px}}
+
+/* Photo-real SKB remote: image is the only visible remote face; hotspots are transparent. */
+.tv-stage{width:100%;max-width:390px;margin:2px auto 7px}
+.tv-shell{width:auto;max-width:100%;height:auto;aspect-ratio:1024/1536;border:0;border-radius:0;background-color:transparent;background-size:100% 100%;background-position:center;background-repeat:no-repeat;box-shadow:none;overflow:hidden}
+.tv-shell .tv-logo,.tv-shell .remote-label{display:none}
+.tv-shell button,.tv-shell button.round,.tv-shell button.dpad,.tv-shell button.cmd{background:transparent!important;border:0!important;color:transparent!important;box-shadow:none!important;border-radius:12px;min-height:0;text-shadow:none;font-size:0}
+.tv-shell button:active{background:#b7dbff40!important;filter:none;transform:none;outline:1px solid #d6e8ff80}
+.tv-shell button:focus-visible{outline:2px solid #b4d9ff}
+.tv-profile{margin:3px 0 5px}
+.tv-profile button{min-height:34px;padding:5px 9px}
+.tv-search{width:100%;min-height:42px;margin:6px 0 9px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#111217;color:#fff}
+.tv-popup{max-height:65vh;overflow-y:auto}
+#remoteMatches{max-height:34vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+#remoteMatches button{text-align:left;min-height:40px;font-size:12px}
+#remoteMatches button.selected{border-color:var(--accent2);background:#24303b}
+.tv-stage.active{display:block}
+@media(max-height:850px){.tv-stage{max-width:min(100%,285px)}.tv-profile{font-size:12px}}
 </style></head><body>
 <header class="head"><div class="brand">MAMBO <em>OS</em> UI</div><div class="sub">BY SKB · M5STICKC PLUS2 CONTROL CONSOLE</div></header>
 <div class="connection"><span id="connection"><span class="dot">●</span> USB DISCONNECTED</span><span>115200 · SERIAL</span></div>
@@ -93,13 +110,14 @@ body[data-theme=hidden] .sub{opacity:.4}
 <main id="pages">
 <section class="page active" data-title="HOME"><h2>Device overview</h2>
 <div class="panel"><h3>USB CONNECTION</h3><p id="welcome">Tap CONNECT USB above and approve Android's USB permission prompt.</p><button class="red" id="hello">CHECK CONNECTION</button><button id="getStatus">REFRESH STATUS</button><pre id="status">Waiting for USB...</pre></div>
+<div class="panel"><h3>LIVE DEVICE HEALTH</h3><div class="grid"><div>BATTERY<br><strong id="healthBattery">—</strong></div><div>FREE RAM<br><strong id="healthRam">—</strong></div><div>UPTIME<br><strong id="healthUptime">—</strong></div><div>Wi-Fi AP<br><strong id="healthWifi">—</strong></div></div></div>
 <div class="panel"><h3>QUICK ACCESS</h3><div class="grid"><button data-goto="1">TV REMOTES</button><button data-goto="2">MONITOR POWER</button><button data-goto="3">WI-FI SCAN</button><button data-goto="4">BLUETOOTH</button></div></div>
 <div class="panel"><h3>CONNECTION MODE</h3><p class="muted">Commands are sent over the USB-C OTG cable, not the SKB Wi-Fi hotspot. Your Samsung phone can stay connected to your normal Wi-Fi or mobile internet. Existing device Wi-Fi dashboard remains available as backup.</p></div>
 </section>
 <section class="page" data-title="TV IR"><h2>TV remote controller</h2>
 <div class="tv-profile"><strong id="tvActiveName">NO REMOTE LOADED</strong><button id="tvChange">CHANGE</button></div>
 <div id="tvSelector" class="tv-popup open"><h3>CHOOSE A REMOTE</h3>
-<select id="remoteSelect"></select><div class="grid"><button id="refreshRemotes">SEARCH REMOTES</button><button id="loadRemote" class="red">LOAD REMOTE</button></div>
+<input id="remoteSearchInput" class="tv-search" type="search" placeholder="Search remote by brand or filename" aria-label="Search stored remotes"><div id="remoteMatches" aria-label="Matching remote files"></div><select id="remoteSelect" aria-label="Selected remote file"></select><div class="grid"><button id="refreshRemotes">SEARCH REMOTES</button><button id="loadRemote" class="red">LOAD REMOTE</button></div>
 <button id="tvImportOpen">UPLOAD ANOTHER REMOTE</button><p class="muted">Import a Flipper-format .ir profile from the remote library; your SKB controller keeps the same button layout.</p></div>
 <div id="tvStage" class="tv-stage">
 <div class="tv-shell" aria-label="SKB metallic TV remote">
@@ -190,11 +208,18 @@ $('pages').addEventListener('touchstart',e=>{if(e.touches.length!==1||e.target.c
 $('pages').addEventListener('touchend',e=>{if(!swipe)return;swipe=false;let dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.35)show(page+(dx<0?1:-1))},{passive:true});
 function setText(id,s){$(id).textContent=typeof s==='string'?s:JSON.stringify(s,null,2);}
 function uiError(e){return String(e.message||e)}
-window.skbConnected=on=>{connected=!!on;$('connection').innerHTML='<span class="dot '+(connected?'on':'')+'">●</span> USB '+(connected?'CONNECTED':'DISCONNECTED');$('welcome').textContent=connected?'USB connected. Your phone Wi-Fi remains available.':'Press CONNECT USB above, then allow Android USB access.';if(connected){rpc('usb_hello').then(x=>setText('status',x)).catch(e=>setText('status',uiError(e)));}};
+window.skbConnected=on=>{connected=!!on;$('connection').innerHTML='<span class="dot '+(connected?'on':'')+'">●</span> USB '+(connected?'CONNECTED':'DISCONNECTED');$('welcome').textContent=connected?'USB connected. Your phone Wi-Fi remains available.':'Press CONNECT USB above, then allow Android USB access.';if(connected){rpc('usb_hello').then(x=>setText('status',x)).catch(e=>setText('status',uiError(e)));refreshHealth();}};
 window.skbReply=raw=>{try{const d=JSON.parse(raw);if(!pending.has(d.id))return;const task=pending.get(d.id);pending.delete(d.id);clearTimeout(task.timer);if(d.ok)task.resolve(d);else task.reject(Error(d.error||'Device rejected command'));}catch(e){setText('diagnostics','Invalid USB reply: '+uiError(e));}};
 function rpc(cmd,args={}){return new Promise((resolve,reject)=>{const id=serial++,request={id,cmd,...args};if(!window.SKB||!SKB.isConnected()){reject(Error('USB not connected. Tap CONNECT USB at the top.'));return}const timer=setTimeout(()=>{pending.delete(id);reject(Error('USB response timeout; check cable or reconnect.'));},cmd==='usb_ble_scan'?14000:8000);pending.set(id,{resolve,reject,timer});try{SKB.command(JSON.stringify(request));}catch(e){clearTimeout(timer);pending.delete(id);reject(e);}});}
 async function run(id,cmd,args){setText(id,'Working...');try{const result=await rpc(cmd,args||{});setText(id,result);return result;}catch(e){setText(id,'Error: '+uiError(e));return null;}}
-$('hello').onclick=()=>run('status','usb_hello');$('getStatus').onclick=()=>run('status','usb_status');
+$('hello').onclick=()=>run('status','usb_hello');async function refreshHealth(){
+ const r=await run('status','usb_status');if(!r)return;
+ $('healthBattery').textContent=Number.isFinite(Number(r.battery_voltage))?Number(r.battery_voltage).toFixed(2)+' V':'—';
+ $('healthRam').textContent=Number.isFinite(Number(r.free_heap))?Math.round(Number(r.free_heap)/1024)+' KB':'—';
+ $('healthUptime').textContent=Number.isFinite(Number(r.uptime_ms))?Math.floor(Number(r.uptime_ms)/60000)+' min':'—';
+ $('healthWifi').textContent=r.wifi_ap_ip||'—';
+}
+$('getStatus').onclick=refreshHealth;
 $('ping').onclick=()=>run('diagnostics','usb_hello');
 $('usbDevices').onclick=()=>setText('diagnostics',window.SKB ? SKB.listDevices() : 'Android USB bridge unavailable');
 window.skbUsbDiagnostics=text=>setText('diagnostics',text);
@@ -219,20 +244,44 @@ const keyAliases={
  channelup:['ch_up','channel_up','channel+','ch+','channelup','programme_up','program_up'],
  channeldown:['ch_down','channel_down','channel-','ch-','channeldown','programme_down','program_down'],
  source:['source','input','input_select','av','inputs'],settings:['settings','setup','options','gear'],
- menu:['menu','home','main_menu'],back:['back','return','exit']
+ menu:['menu','home','main_menu'],search:['search','find','magnify'],back:['back','return','exit']
 };
 function normalizedKey(t){return String(t).toLowerCase().replace(/[^a-z0-9+\-]/g,'');}
 function matchTvKey(action){const keys=keyAliases[action]||[action];for(const alias of keys){const match=tvKeys.find(k=>normalizedKey(k.name)===normalizedKey(alias));if(match)return match.name}return null}
 async function sendTvKey(action){const key=matchTvKey(action);if(!key){setText('irState',action.toUpperCase()+' not available in '+tvFile);return}const r=await run('irState','usb_ir_send',{file:tvFile,key});if(r)setText('irState',key+' sent · TV response not verified')}
 document.querySelectorAll('[data-tvkey]').forEach(button=>button.onclick=()=>sendTvKey(button.dataset.tvkey));
-function chooseTvRemote(){$('tvSelector').classList.add('open');$('tvStage').classList.remove('active');refreshRemotes();}
+function chooseTvRemote(){$('tvSelector').classList.add('open');$('tvStage').classList.remove('active');refreshRemotes();$('remoteSearchInput').focus();}
 $('tvChange').onclick=chooseTvRemote;$('tvSearchRemote').onclick=chooseTvRemote;
 $('tvPowerExtra').onclick=()=>sendTvKey('power');$('tvBackExtra').onclick=()=>sendTvKey('back');
 $('tvImportOpen').onclick=()=>{show(titles.indexOf('SETTINGS'));$('irName').focus();setText('importState','Paste a Flipper .ir file below and press IMPORT TO M5STICK. Then return to TV IR and refresh remotes.');};
 $('refreshRemotes').onclick=refreshRemotes;
-async function refreshRemotes(){const r=await run('irState','usb_ir_library');if(!r)return;const previous=$('remoteSelect').value;const options=r.files.filter(x=>!x.name.startsWith('Monitor_'));$('remoteSelect').replaceChildren();for(const item of options){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');$('remoteSelect').append(opt)}if(options.some(x=>x.name===previous))$('remoteSelect').value=previous;setText('irState',options.length+' stored TV remotes available. Choose one and press LOAD REMOTE.');}
+let remoteFiles=[];
+function renderRemoteMatches(){
+ const q=$('remoteSearchInput').value.trim().toLowerCase();
+ const matches=remoteFiles.filter(x=>x.name.toLowerCase().replace(/_/g,' ').includes(q));
+ const list=$('remoteMatches');list.replaceChildren();
+ for(const item of matches.slice(0,80)){
+  const b=document.createElement('button');b.type='button';
+  b.textContent=item.name.replace(/_/g,' ').replace(/\\.ir$/i,'');
+  b.classList.toggle('selected',$('remoteSelect').value===item.name);
+  b.onclick=()=>{$('remoteSelect').value=item.name;loadRemote()};
+  list.append(b);
+ }
+ if(!matches.length){const p=document.createElement('p');p.className='muted';p.textContent='No matching remote profiles. Import a .ir file in Settings.';list.append(p)}
+}
+$('remoteSearchInput').addEventListener('input',renderRemoteMatches);
+async function refreshRemotes(){
+ const r=await run('irState','usb_ir_library');if(!r)return;
+ const previous=$('remoteSelect').value||tvFile;
+ remoteFiles=(r.files||[]).filter(x=>!x.name.startsWith('Monitor_')).sort((a,b)=>a.name.localeCompare(b.name));
+ $('remoteSelect').replaceChildren();
+ for(const item of remoteFiles){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\\.ir$/i,'');$('remoteSelect').append(opt)}
+ if(remoteFiles.some(x=>x.name===previous))$('remoteSelect').value=previous;
+ renderRemoteMatches();
+ setText('irState',remoteFiles.length+' stored remotes. Search by name and tap one to load.');
+}
 $('loadRemote').onclick=loadRemote;
-async function loadRemote(){const file=$('remoteSelect').value;if(!file)return;const r=await run('irState','usb_ir_keys',{file});if(!r)return;tvFile=file;tvKeys=r.keys||[];$('tvActiveName').textContent=file.replace(/_/g,' ').replace(/\.ir$/,'');$('tvStage').classList.add('active');$('tvSelector').classList.remove('open');const target=$('remoteButtons');target.replaceChildren();const used=new Set(Object.keys(keyAliases).map(matchTvKey).filter(Boolean));for(const item of tvKeys){if(used.has(item.name))continue;const b=document.createElement('button');b.textContent=item.name.replaceAll('_',' ');b.onclick=()=>run('irState','usb_ir_send',{file,key:item.name});target.append(b);}setText('irState',tvKeys.length+' keys loaded · '+file+' · tap controls to transmit');}
+async function loadRemote(){const file=$('remoteSelect').value;if(!file)return;const r=await run('irState','usb_ir_keys',{file});if(!r)return;tvFile=file;tvKeys=r.keys||[];$('tvActiveName').textContent=file.replace(/_/g,' ').replace(/\.ir$/,'');$('tvStage').classList.add('active');$('tvSelector').classList.remove('open');const target=$('remoteButtons');target.replaceChildren();const used=new Set(Object.keys(keyAliases).map(matchTvKey).filter(Boolean));for(const item of tvKeys){if(used.has(item.name))continue;const b=document.createElement('button');b.textContent=item.name.replaceAll('_',' ');b.onclick=()=>run('irState','usb_ir_send',{file,key:item.name});target.append(b);}setText('irState',tvKeys.length+' keys loaded · '+file+' · tap controls to transmit');renderRemoteMatches();}
 document.querySelectorAll('[data-tvbrand]').forEach(b=>b.onclick=()=>run('irState','usb_ir_tv_power',{brand:b.dataset.tvbrand}));
 $('scanWifi').onclick=()=>run('wifiState','usb_wifi_scan');
 $('wifiResults').onclick=async()=>{const r=await run('wifiState','usb_wifi_results');const list=$('wifiList');list.replaceChildren();if(!r||!r.networks)return;for(const ap of r.networks){const row=document.createElement('div');row.className='panel';row.textContent=(ap.ssid||'(hidden)')+' · '+ap.rssi+' dBm · CH '+ap.channel;list.append(row);}};
