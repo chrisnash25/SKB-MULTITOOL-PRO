@@ -19,9 +19,65 @@
 #include "mambo_radio_probe.h"
 #include "mambo_radio_observe.h"
 #include "mambo_cc1101_observe.h"
+#include "mambo_mobile_theme.h"
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
+static File mamboBrandUpload;
+static String mamboBrandPath;
+static String mamboBrandMime;
+static bool mamboBrandError=false;
+static const char* brandFile(const String& kind) {
+  if(kind=="icon")return "/mambo-icon.img";
+  if(kind=="portrait")return "/mambo-portrait.img";
+  if(kind=="skb")return "/mambo-skb.img";
+  return nullptr;
+}
+static void mamboBrandUploadHandler() {
+  if(!filesystemReady) {mamboBrandError=true;return;}
+  HTTPUpload& up=server.upload();
+  const String url=server.uri();
+  const String kind=url.substring(url.lastIndexOf('/')+1);
+  const char* target=brandFile(kind);
+  if(!target){mamboBrandError=true;return;}
+  if(up.status==UPLOAD_FILE_START) {
+    mamboBrandError=false;
+    if(mamboBrandUpload)mamboBrandUpload.close();
+    mamboBrandPath=target;
+    mamboBrandMime=up.type;
+    if(mamboBrandMime!="image/jpeg" && mamboBrandMime!="image/png"){mamboBrandError=true;return;}
+    mamboBrandUpload=LittleFS.open(mamboBrandPath,"w");
+    if(!mamboBrandUpload)mamboBrandError=true;
+  } else if(up.status==UPLOAD_FILE_WRITE) {
+    if(mamboBrandError || up.totalSize>120000 || up.currentSize>120000-up.totalSize) {
+      mamboBrandError=true;return;
+    }
+    if(!mamboBrandUpload || mamboBrandUpload.write(up.buf,up.currentSize)!=up.currentSize)mamboBrandError=true;
+  } else if(up.status==UPLOAD_FILE_END || up.status==UPLOAD_FILE_ABORTED) {
+    if(up.status==UPLOAD_FILE_ABORTED || up.totalSize>120000)mamboBrandError=true;
+    if(mamboBrandUpload)mamboBrandUpload.close();
+    if(mamboBrandError)LittleFS.remove(mamboBrandPath);
+  }
+}
+static void mamboBrandUploadResponse() {
+  JsonDocument d;
+  d["ok"]=filesystemReady && !mamboBrandError;
+  d["image"]=server.uri();
+  if(!d["ok"].as<bool>())d["error"]="invalid_image_or_too_large";
+  String out;serializeJson(d,out);
+  server.send(d["ok"].as<bool>()?200:422,"application/json",out);
+}
+static void mamboBrandServe(const String& kind) {
+  const char* path=brandFile(kind);
+  if(!filesystemReady || !path || !LittleFS.exists(path)) {
+    server.send(404,"text/plain","Brand image not uploaded");return;
+  }
+  File file=LittleFS.open(path,"r");
+  uint8_t magic[4]={0};file.read(magic,4);file.seek(0);
+  const char* mime=(magic[0]==0x89 && magic[1]=='P')?"image/png":"image/jpeg";
+  server.streamFile(file,mime);file.close();
+}
+
 static void mamboRadioStatus() {
   JsonDocument d;
   MamboRadio::fillDiagnostics(d,mamboRadioMode);
@@ -459,6 +515,13 @@ void setup() {
   bleScanner->setActiveScan(false);
   bleAdvertiser=BLEDevice::getAdvertising();
   bleAdvertiser->setScanResponse(true);
+  server.on("/mambo.css", HTTP_GET, [](){server.send_P(200,"text/css",MAMBO_MOBILE_CSS);});
+  server.on("/mambo-brand/icon", HTTP_GET, [](){mamboBrandServe("icon");});
+  server.on("/mambo-brand/portrait", HTTP_GET, [](){mamboBrandServe("portrait");});
+  server.on("/mambo-brand/skb", HTTP_GET, [](){mamboBrandServe("skb");});
+  server.on("/api/mambo/brand/icon", HTTP_POST, mamboBrandUploadResponse, mamboBrandUploadHandler);
+  server.on("/api/mambo/brand/portrait", HTTP_POST, mamboBrandUploadResponse, mamboBrandUploadHandler);
+  server.on("/api/mambo/brand/skb", HTTP_POST, mamboBrandUploadResponse, mamboBrandUploadHandler);
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
   server.on("/api/mambo/diagnostics", HTTP_GET, mamboRadioStatus);
@@ -505,7 +568,8 @@ void setup() {
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mambo OS Firmware</title>
+<title>Mambo OS V3 · Radio & Device Lab</title>
+<link rel="stylesheet" href="/mambo.css">
 <style>
 :root{color-scheme:dark;--ink:#090909;--panel:#171717;--line:#4d3636;--blue:#bb3434;--silver:#ded8d5}
 *{box-sizing:border-box}body{margin:0;color:#eee8e5;background:repeating-linear-gradient(115deg,#0b0b0c 0px,#101011 3px,#0b0b0c 6px);font:14px/1.5 system-ui,Arial}
@@ -624,6 +688,37 @@ const footer=document.createElement('div');footer.className='skb-pager';
 for(const [id,title] of specs){const pg=document.createElement('section');pg.className='skb-page';pg.id='skb-page-'+id;pg.setAttribute('aria-label',title);
 const head=document.createElement('div');head.className='skb-page-title';const strong=document.createElement('strong');strong.textContent=title;const hint=document.createElement('span');hint.textContent='SWIPE LEFT / RIGHT';head.append(strong,hint);pg.append(head);containers[id]=pg;deck.append(pg);
 const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.dataset.page=id;tab.setAttribute('aria-controls',pg.id);tab.addEventListener('click',()=>show(id));tabs.append(tab)}
+
+const brandPanel=document.createElement('article');
+brandPanel.className='mambo-brand-control';
+brandPanel.innerHTML='<h2>MY MAMBO BRANDING</h2><div class="mambo-brand-strip"><div><img id="mambo-icon-display" alt="Mambo app icon" src="/mambo-brand/icon"><small>App icon</small></div><div><img id="mambo-portrait-display" alt="Mambo cat artwork" src="/mambo-brand/portrait"><small>Mambo portrait</small></div><div><img id="mambo-skb-display" alt="SKB made by Chris Nash" src="/mambo-brand/skb"><small>SKB logo</small></div></div><p class="muted">Add your original three images once; the device stores them in LittleFS. Photos are resized on the phone before transfer.</p><label>Mambo app icon <input id="mambo-brand-input-icon" type="file" accept="image/png,image/jpeg"></label><label>Mambo cat portrait <input id="mambo-brand-input-portrait" type="file" accept="image/png,image/jpeg"></label><label>SKB logo <input id="mambo-brand-input-skb" type="file" accept="image/png,image/jpeg"></label><button id="mambo-brand-save" type="button">SAVE THREE BRAND IMAGES</button><p id="mambo-brand-result" class="mambo-status-text">Ready for image upload</p>';
+containers.home.prepend(brandPanel);
+async function mamboSaveBrand(){
+ const out=document.getElementById('mambo-brand-result');
+ const kinds=['icon','portrait','skb'];
+ for(const kind of kinds){
+  const input=document.getElementById('mambo-brand-input-'+kind);
+  if(!input.files.length)continue;
+  out.textContent='Uploading '+kind+'...';
+  try{
+   const img=await createImageBitmap(input.files[0]);
+   const canvas=document.createElement('canvas');const max=kind==='portrait'?420:300;
+   const ratio=Math.min(1,max/Math.max(img.width,img.height));
+   canvas.width=Math.round(img.width*ratio);canvas.height=Math.round(img.height*ratio);
+   const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);img.close();
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.72));
+   if(!blob || blob.size>120000)throw Error('Compressed image exceeds 120 KB');
+   const data=new FormData();data.append('image',blob,kind+'.jpg');
+   const response=await fetch('/api/mambo/brand/'+kind,{method:'POST',body:data});
+   const result=await response.json();
+   if(!response.ok||!result.ok)throw Error(result.error||'Upload failed');
+   document.getElementById('mambo-'+(kind==='icon'?'icon':kind==='portrait'?'portrait':'skb')+'-display').src='/mambo-brand/'+kind+'?t='+Date.now();
+   out.textContent='Saved '+kind;
+  }catch(e){out.textContent=kind+': '+String(e);return}
+ }
+ out.textContent='Branding updated. Images are saved on the device.';
+}
+document.getElementById('mambo-brand-save').addEventListener('click',mamboSaveBrand);
 const radioPanel=document.createElement('article');
 radioPanel.innerHTML='<h2>Mambo OS V3 · Radio Lab</h2><p>One interchangeable 8-pin radio at a time. Switch off the M5StickC Plus2 before changing modules.</p><label>Selected module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 Sub-GHz</option><option value="nrf24">nRF24 2.4 GHz</option></select></label> <button id="mambo-set">Set mode</button> <button id="mambo-refresh">Refresh</button> <button id="mambo-probe">Read-only SPI probe</button> <button id="mambo-nrf-sample">nRF24 channel sample</button> <button id="mambo-cc-rssi">CC1101 RSSI</button><pre id="mambo-status"></pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">Inspect</button><pre id="mambo-sub-result"></pre><h3>Offline RF observation analyser</h3><p>Import an existing JSON array of observations: [{frequency_mhz:433.92,power_dbm:-72}] for CC1101, or [{channel:40,detected:true}] for nRF24. These are imported measurements, not live scans.</p><input type="file" id="mambo-observations" accept=".json,application/json"><button id="mambo-analyse">Analyse imported samples</button><pre id="mambo-observation-result"></pre><p>RF scanning and transmission remain unavailable until the module wiring and hardware are validated. Rolling-code support is limited to offline diagnostics.</p>';
 containers.radio.append(radioPanel);
