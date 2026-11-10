@@ -595,12 +595,38 @@ for(const [id,title] of specs){const pg=document.createElement('section');pg.cla
 const head=document.createElement('div');head.className='skb-page-title';const strong=document.createElement('strong');strong.textContent=title;const hint=document.createElement('span');hint.textContent='SWIPE LEFT / RIGHT';head.append(strong,hint);pg.append(head);containers[id]=pg;deck.append(pg);
 const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.dataset.page=id;tab.setAttribute('aria-controls',pg.id);tab.addEventListener('click',()=>show(id));tabs.append(tab)}
 const radioPanel=document.createElement('article');
-radioPanel.innerHTML='<h2>Mambo OS V3 · Radio Lab</h2><p>One interchangeable 8-pin radio at a time. Switch off the M5StickC Plus2 before changing modules.</p><label>Selected module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 Sub-GHz</option><option value="nrf24">nRF24 2.4 GHz</option></select></label> <button id="mambo-set">Set mode</button> <button id="mambo-refresh">Refresh</button><pre id="mambo-status"></pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">Inspect</button><pre id="mambo-sub-result"></pre><p>RF scanning and transmission remain unavailable until the module wiring and hardware are validated. Rolling-code support is limited to offline diagnostics.</p>';
+radioPanel.innerHTML='<h2>Mambo OS V3 · Radio Lab</h2><p>One interchangeable 8-pin radio at a time. Switch off the M5StickC Plus2 before changing modules.</p><label>Selected module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 Sub-GHz</option><option value="nrf24">nRF24 2.4 GHz</option></select></label> <button id="mambo-set">Set mode</button> <button id="mambo-refresh">Refresh</button><pre id="mambo-status"></pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">Inspect</button><pre id="mambo-sub-result"></pre><h3>Offline RF observation analyser</h3><p>Import an existing JSON array of observations: [{frequency_mhz:433.92,power_dbm:-72}] for CC1101, or [{channel:40,detected:true}] for nRF24. These are imported measurements, not live scans.</p><input type="file" id="mambo-observations" accept=".json,application/json"><button id="mambo-analyse">Analyse imported samples</button><pre id="mambo-observation-result"></pre><p>RF scanning and transmission remain unavailable until the module wiring and hardware are validated. Rolling-code support is limited to offline diagnostics.</p>';
 containers.radio.append(radioPanel);
 async function mamboRefresh(){try{const r=await fetch('/api/mambo/radio');const d=await r.json();document.getElementById('mambo-status').textContent=JSON.stringify(d,null,2);document.getElementById('mambo-mode').value=d.selected_mode||'none'}catch(e){document.getElementById('mambo-status').textContent=String(e)}}
 document.getElementById('mambo-refresh').onclick=mamboRefresh;
 document.getElementById('mambo-set').onclick=async()=>{await fetch('/api/mambo/radio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:document.getElementById('mambo-mode').value})});mamboRefresh()};
 document.getElementById('mambo-inspect').onclick=async()=>{const file=document.getElementById('mambo-sub').files[0];if(!file)return;const output=document.getElementById('mambo-sub-result');if(file.size>8192){output.textContent='Maximum 8 KB';return}try{const r=await fetch('/api/mambo/sub/inspect',{method:'POST',headers:{'Content-Type':'text/plain'},body:await file.text()});output.textContent=JSON.stringify(await r.json(),null,2)}catch(e){output.textContent=String(e)}};
+document.getElementById('mambo-analyse').onclick=async()=>{
+ const f=document.getElementById('mambo-observations').files[0];
+ const out=document.getElementById('mambo-observation-result');
+ if(!f){out.textContent='Choose a JSON file';return}
+ if(f.size>65536){out.textContent='File must be 64 KB or less';return}
+ try {
+  const rows=JSON.parse(await f.text());
+  if(!Array.isArray(rows)||rows.length>512||!rows.length)throw Error('Expected 1 to 512 observations');
+  const groups=new Map();
+  for(const row of rows){
+   if(!row||typeof row!=='object')throw Error('Invalid observation');
+   const key=Number.isFinite(row.frequency_mhz)?'MHz '+Number(row.frequency_mhz).toFixed(3):
+    Number.isInteger(row.channel)?'CH '+row.channel:null;
+   if(!key)throw Error('Each observation needs frequency_mhz or channel');
+   if(Number.isFinite(row.power_dbm)&& (row.power_dbm>30||row.power_dbm< -150))throw Error('Invalid power_dbm');
+   if(!groups.has(key))groups.set(key,{samples:0,detected:0,powerSum:0,powerCount:0});
+   const g=groups.get(key);g.samples++;
+   if(row.detected===true)g.detected++;
+   if(Number.isFinite(row.power_dbm)){g.powerSum+=row.power_dbm;g.powerCount++}
+  }
+  const lines=[...groups.entries()].sort((a,b)=>b[1].samples-a[1].samples).map(([key,g])=>
+   key+' | samples '+g.samples+' | detections '+g.detected+
+   (g.powerCount?' | mean '+(g.powerSum/g.powerCount).toFixed(1)+' dBm':''));
+  out.textContent='OFFLINE IMPORT ONLY — '+rows.length+' observations\\n'+lines.join('\\n');
+ } catch(e){out.textContent='Invalid observations: '+e.message}
+};
 mamboRefresh();
 const original=Array.from(host.children);
 for(const node of original){
