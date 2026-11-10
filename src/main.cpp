@@ -719,35 +719,82 @@ async function mamboSaveBrand(){
 }
 document.getElementById('mambo-brand-save').addEventListener('click',mamboSaveBrand);
 const radioPanel=document.createElement('article');
-radioPanel.innerHTML='<h2>Mambo OS V3 · Radio Lab</h2><p>One interchangeable 8-pin radio at a time. Switch off the M5StickC Plus2 before changing modules.</p><label>Selected module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 Sub-GHz</option><option value="nrf24">nRF24 2.4 GHz</option></select></label> <button id="mambo-set">Set mode</button> <button id="mambo-refresh">Refresh</button> <button id="mambo-probe">Read-only SPI probe</button> <button id="mambo-nrf-sample">nRF24 channel sample</button> <button id="mambo-cc-rssi">CC1101 RSSI</button><pre id="mambo-status"></pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">Inspect</button><pre id="mambo-sub-result"></pre><h3>Offline RF observation analyser</h3><p>Import an existing JSON array of observations: [{frequency_mhz:433.92,power_dbm:-72}] for CC1101, or [{channel:40,detected:true}] for nRF24. These are imported measurements, not live scans.</p><input type="file" id="mambo-observations" accept=".json,application/json"><button id="mambo-analyse">Analyse imported samples</button><pre id="mambo-observation-result"></pre><p>RF scanning and transmission remain unavailable until the module wiring and hardware are validated. Rolling-code support is limited to offline diagnostics.</p>';
+radioPanel.innerHTML='<h2>Radio Lab</h2><p class="muted">One CC1101 or nRF24 module at a time. Turn off the M5StickC Plus2 before swapping. Measurements require the verified hardware firmware profile.</p><label>Installed module <select id="mambo-mode"><option value="none">No module</option><option value="cc1101">CC1101 · Sub-GHz</option><option value="nrf24">nRF24 · 2.4 GHz</option></select></label><div class="mambo-button-grid"><button id="mambo-set">SAVE RADIO MODE</button><button id="mambo-refresh">REFRESH STATUS</button><button id="mambo-probe">CHECK MODULE</button><button id="mambo-cc-rssi">CC1101 RSSI</button><button id="mambo-nrf-sample">nRF24 CHANNELS</button><button id="mambo-download">SAVE LAST RESULTS</button></div><div class="mambo-radio-bars" id="mambo-radio-bars" aria-label="Radio observations" role="img"></div><p class="mambo-status-text" id="mambo-radio-feedback" aria-live="polite">Choose a radio and refresh status.</p><pre id="mambo-status">No results yet</pre><h3>Flipper .sub metadata inspector</h3><input type="file" id="mambo-sub" accept=".sub,text/plain"><button id="mambo-inspect">INSPECT FILE</button><pre id="mambo-sub-result">Choose a .sub file for offline metadata inspection.</pre><h3>Offline RF observation analyser</h3><p class="muted">Import your own JSON observations to compare frequencies, power and channels. No packet decoding or transmissions.</p><input type="file" id="mambo-observations" accept=".json,application/json"><button id="mambo-analyse">ANALYSE IMPORTED SAMPLES</button><pre id="mambo-observation-result">Choose a JSON file.</pre>';
 containers.radio.append(radioPanel);
-async function mamboRefresh(){try{const r=await fetch('/api/mambo/radio');const d=await r.json();document.getElementById('mambo-status').textContent=JSON.stringify(d,null,2);document.getElementById('mambo-mode').value=d.selected_mode||'none'}catch(e){document.getElementById('mambo-status').textContent=String(e)}}
+let mamboLastResult=null;
+const mamboFeedback=document.getElementById('mambo-radio-feedback');
+const mamboOut=document.getElementById('mambo-status');
+function mamboShowResult(result) {
+ mamboLastResult=result;
+ mamboOut.textContent=JSON.stringify(result,null,2);
+ mamboFeedback.textContent=result.ok?('Updated: '+(result.selected_mode||result.mode||'device')):('Unavailable: '+(result.error||result.reason||'request_failed'));
+ const graph=document.getElementById('mambo-radio-bars');graph.replaceChildren();
+ const rows=Array.isArray(result.observations)?result.observations:[];
+ if(!rows.length){graph.textContent='No live samples available for this mode';return}
+ rows.slice(0,16).forEach(row=>{
+  const bar=document.createElement('span');
+  const power=typeof row.power_dbm==='number'?Math.max(5,Math.min(100,(row.power_dbm+120)*1.25)):(row.detected===true?85:10);
+  bar.style.height=power+'%';
+  bar.title=(row.frequency_mhz||row.channel||'?')+': '+(row.power_dbm===undefined?(row.detected?'Detected':'Below threshold'):row.power_dbm+' dBm');
+  graph.append(bar);
+ });
+}
+async function mamboRequest(url,options={}) {
+ const response=await fetch(url,options);
+ let result=await response.json();
+ if(!response.ok && !result.error)result.error='HTTP '+response.status;
+ mamboShowResult(result);
+ return result;
+}
+async function mamboRefresh(){
+ try{
+  const result=await mamboRequest('/api/mambo/radio');
+  document.getElementById('mambo-mode').value=result.selected_mode||'none';
+  mamboToggleMode();
+ }catch(e){mamboFeedback.textContent='Connection error: '+e.message}
+}
+function mamboToggleMode(){
+ const mode=document.getElementById('mambo-mode').value;
+ document.getElementById('mambo-cc-rssi').disabled=mode!=='cc1101';
+ document.getElementById('mambo-nrf-sample').disabled=mode!=='nrf24';
+ document.getElementById('mambo-probe').disabled=mode==='none';
+}
+document.getElementById('mambo-mode').addEventListener('change',mamboToggleMode);
 document.getElementById('mambo-refresh').onclick=mamboRefresh;
 document.getElementById('mambo-probe').onclick=async()=>{
- const el=document.getElementById('mambo-status');
- try {
-  const response=await fetch('/api/mambo/probe',{method:'POST'});
-  const result=await response.json();
-  el.textContent=JSON.stringify(result,null,2);
- } catch(e){el.textContent='Probe unavailable: '+String(e)}
+ try{await mamboRequest('/api/mambo/probe',{method:'POST'})}
+ catch(e){mamboFeedback.textContent=e.message}
 };
 document.getElementById('mambo-cc-rssi').onclick=async()=>{
- const el=document.getElementById('mambo-status');
- try {
-  const r=await fetch('/api/mambo/cc1101/rssi');
-  el.textContent=JSON.stringify(await r.json(),null,2);
- } catch(e){el.textContent=String(e)}
+ try{await mamboRequest('/api/mambo/cc1101/rssi')}
+ catch(e){mamboFeedback.textContent=e.message}
 };
 document.getElementById('mambo-nrf-sample').onclick=async()=>{
- const el=document.getElementById('mambo-status');
- try {
-  const response=await fetch('/api/mambo/observe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_channel:0,count:8})});
-  const result=await response.json();
-  el.textContent=JSON.stringify(result,null,2);
- } catch(e){el.textContent='Observation unavailable: '+String(e)}
+ try{await mamboRequest('/api/mambo/observe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_channel:0,count:8})})}
+ catch(e){mamboFeedback.textContent=e.message}
 };
-document.getElementById('mambo-set').onclick=async()=>{await fetch('/api/mambo/radio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:document.getElementById('mambo-mode').value})});mamboRefresh()};
-document.getElementById('mambo-inspect').onclick=async()=>{const file=document.getElementById('mambo-sub').files[0];if(!file)return;const output=document.getElementById('mambo-sub-result');if(file.size>8192){output.textContent='Maximum 8 KB';return}try{const r=await fetch('/api/mambo/sub/inspect',{method:'POST',headers:{'Content-Type':'text/plain'},body:await file.text()});output.textContent=JSON.stringify(await r.json(),null,2)}catch(e){output.textContent=String(e)}};
+document.getElementById('mambo-set').onclick=async()=>{
+ try{
+  const result=await mamboRequest('/api/mambo/radio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:document.getElementById('mambo-mode').value})});
+  if(result.ok)await mamboRefresh();
+ }catch(e){mamboFeedback.textContent=e.message}
+};
+document.getElementById('mambo-download').onclick=()=>{
+ if(!mamboLastResult){mamboFeedback.textContent='No results to save yet';return}
+ const b=new Blob([JSON.stringify(mamboLastResult,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(b);
+ const link=document.createElement('a');link.href=url;link.download='mambo-radio-results.json';link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+document.getElementById('mambo-inspect').onclick=async()=>{
+ const file=document.getElementById('mambo-sub').files[0],out=document.getElementById('mambo-sub-result');
+ if(!file){out.textContent='Select a .sub file first';return}
+ if(file.size>8192){out.textContent='Maximum 8 KB';return}
+ try{
+  const r=await fetch('/api/mambo/sub/inspect',{method:'POST',headers:{'Content-Type':'text/plain'},body:await file.text()});
+  const d=await r.json();out.textContent=JSON.stringify(d,null,2);
+ }catch(e){out.textContent='Unable to inspect: '+e.message}
+};
 document.getElementById('mambo-analyse').onclick=async()=>{
  const f=document.getElementById('mambo-observations').files[0];
  const out=document.getElementById('mambo-observation-result');
