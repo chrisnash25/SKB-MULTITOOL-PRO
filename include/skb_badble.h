@@ -5,7 +5,7 @@
 #include <BleKeyboard.h>
 // Keyboard HID is used only after the host's standard Bluetooth pairing approval.
 // Automatic BLE advertising/reconnection; NO automatic keystroke transmission.
-static BleKeyboard skbKeyboard("SKB BLE Keyboard","SKB",100);
+static BleKeyboard skbKeyboard("SKB BLE HID","SKB",100);
 static bool skbKeyboardStarted=false;
 static bool skbMacroRunning=false;
 static bool skbMacroStop=false;
@@ -36,7 +36,7 @@ inline bool skbMacroExists(const String& name){
  return names.indexOf(","+name+",")>=0;
 }
 inline void skbBadBleStatus(JsonDocument& doc){
- doc["ok"]=true;doc["mode"]="BLE HID keyboard";doc["device"]="SKB BLE Keyboard";
+ doc["ok"]=true;doc["mode"]="BLE HID keyboard";doc["device"]="SKB BLE HID";
  doc["started"]=skbKeyboardStarted;doc["connected"]=skbKeyboard.isConnected();
  doc["running"]=skbMacroRunning;doc["selected"]=skbMacroCurrent;
  doc["position"]=skbMacroPosition;doc["manual_execution_only"]=true;
