@@ -47,6 +47,45 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 .tv-shell button,.tv-shell button.round,.tv-shell button.dpad,.tv-shell button.cmd{background:transparent!important;border:0!important;border-radius:12px;box-shadow:none!important;color:transparent!important;font-size:0!important;outline:none}
 .tv-shell button:active{background:rgba(255,255,255,.2)!important;transform:none}
 .tv-shell button:focus-visible{outline:2px solid #ff8090}
+
+/* Mambo OS: fixed-height portrait shell, Android system bars remain native. */
+:root{--accent:#b96bff;--accent2:#4fe4f0;--red:var(--accent);--base:#090a10;--panel:#171522;--line:#514167}
+html,body{width:100%;height:100%;overscroll-behavior:none}
+body{background:var(--base)}
+.head{padding:7px 12px 5px;background:linear-gradient(125deg,#1a1727,#090a0d);border-bottom:1px solid var(--accent)}
+.brand{font-size:clamp(17px,4.8vw,22px);line-height:1.1}
+.brand em,h3{color:var(--accent2)}
+.connection{margin:4px 9px 2px;padding:6px 8px;font-size:11px;background:var(--panel);border-color:var(--line)}
+.tabs{padding:5px 8px;gap:5px;scroll-snap-type:x proximity}
+.tabs button{padding:7px 9px;min-height:38px;min-width:65px;scroll-snap-align:center}
+button{border-color:var(--line);border-bottom-color:var(--accent)}
+button.active,.red{background:linear-gradient(135deg,var(--accent),#25202e);border-color:var(--accent)}
+main{padding:0 9px;min-height:0;overflow:hidden}
+.page{height:100%;overflow-y:auto;padding:2px 0 9px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.page h2{margin:5px 0 7px;font-size:15px}
+.panel{padding:10px;margin:6px 0 8px;background:linear-gradient(145deg,var(--panel),#0e0d12);border-color:var(--line)}
+.panel h3{margin-bottom:6px}
+.pager{padding:5px 10px;background:var(--base);border-top-color:var(--line)}
+.pager button{min-height:40px;padding:7px 10px}
+#pages{touch-action:pan-y}
+.theme-picker{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:5px 2px 10px;overscroll-behavior-x:contain}
+.theme-choice{flex:0 0 72%;max-width:270px;min-height:126px;scroll-snap-align:center;text-align:left;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;padding:12px;border:1px solid var(--line);background:linear-gradient(130deg,#1b1b25,#050507)}
+.theme-choice strong{font-size:16px;letter-spacing:.5px}
+.theme-choice small{font-size:11px;opacity:.82}
+.theme-choice[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:-3px}
+.theme-choice[data-theme=neon]{background:linear-gradient(125deg,#102331,#31133d,#060612);border-color:#9d57f7}
+.theme-choice[data-theme=slate]{background:repeating-linear-gradient(115deg,#1b1b1c,#101112 5px,#202123 8px);border-color:#767780}
+.theme-choice[data-theme=lightning]{background:linear-gradient(135deg,#260b38,#090413 65%,#560e45);border-color:#f343d4;box-shadow:inset 0 0 15px #a12df655}
+.theme-choice[data-theme=hacker]{background:repeating-linear-gradient(0deg,#081a17,#081a17 8px,#0d3028 9px);border-color:#15e5a5}
+.theme-choice[data-theme=hidden]{background:#050506;border-color:#2e3033;color:#b6b7b9}
+.theme-help{font-size:11px;color:#bbb;line-height:1.45}
+body[data-theme=neon]{--accent:#bc6bff;--accent2:#48e8f3;--panel:#181324;--line:#614477}
+body[data-theme=slate]{--accent:#9a9ca3;--accent2:#dedee3;--panel:#1b1c1f;--line:#55575b}
+body[data-theme=lightning]{--accent:#f54bce;--accent2:#c274ff;--panel:#241027;--line:#803873;background:radial-gradient(ellipse at top,#300d35,#080610 60%)}
+body[data-theme=hacker]{--accent:#17caa4;--accent2:#8cffb7;--panel:#0a201b;--line:#215e50}
+body[data-theme=hidden]{--accent:#696c70;--accent2:#a8aaad;--panel:#101112;--line:#303134}
+body[data-theme=hidden] .sub{opacity:.4}
+@media(max-height:700px){.head{padding:4px 9px}.sub{display:none}.connection{margin:2px 8px}.tabs{padding:3px 6px}.pager{padding:3px 8px}}
 </style></head><body>
 <header class="head"><div class="brand">MAMBO <em>OS</em> UI</div><div class="sub">BY SKB · M5STICKC PLUS2 CONTROL CONSOLE</div></header>
 <div class="connection"><span id="connection"><span class="dot">●</span> USB DISCONNECTED</span><span>115200 · SERIAL</span></div>
@@ -106,7 +145,15 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div class="panel"><h3>PAIRING / RECONNECTION</h3><p class="muted">Pair once in your own device's Bluetooth settings with SKB BLE HID. Reconnection is automatic when allowed. Macros only run after pressing RUN.</p><button id="hidStatus">CHECK BLE KEYBOARD</button><pre id="hidState">Check pairing status.</pre></div>
 <div class="panel"><h3>SELECT MACRO</h3><select id="hidSelect"></select><button id="hidLoad">REVIEW SELECTED</button><label>Macro name<input id="hidName" maxlength="20" placeholder="MyMacro"></label><label>Plain text macro (up to 160 characters)<textarea id="hidText" maxlength="160" placeholder="Example text to type"></textarea></label>
 <div class="grid"><button id="hidSave">SAVE</button><button id="hidDelete">DELETE</button><button class="red" id="hidRun">RUN SELECTED</button><button id="hidStop">STOP</button></div><pre id="hidResult">Select a saved macro to send, only after pairing.</pre></div></section>
-<section class="page" data-title="SETTINGS"><h2>Settings and imports</h2>
+<section class="page" data-title="SETTINGS"><h2>Settings</h2>
+<div class="panel"><h3>THEME MANAGER</h3><p class="theme-help">Swipe the theme cards left or right. Tap to apply instantly. Your choice is saved on this phone.</p>
+<div class="theme-picker" id="themePicker" aria-label="Choose interface theme">
+<button type="button" class="theme-choice" data-theme="neon"><strong>✦ Mambo Neon</strong><small>Cyan and purple · default</small></button>
+<button type="button" class="theme-choice" data-theme="slate"><strong>◈ Black Slate</strong><small>Dark stone and silver</small></button>
+<button type="button" class="theme-choice" data-theme="lightning"><strong>ϟ Purple Lightning</strong><small>Pink and violet electricity</small></button>
+<button type="button" class="theme-choice" data-theme="hacker"><strong>⌘ Hacker Tech</strong><small>Green terminal and circuitry</small></button>
+<button type="button" class="theme-choice" data-theme="hidden"><strong>◼ Stealth Minimal</strong><small>Discreet and low contrast</small></button>
+</div><p id="themeStatus" class="muted">Mambo Neon</p></div>
 <div class="panel"><h3>PATHSHIELD</h3><p class="muted">Classifies BLE candidates for manual review. Not proof of unwanted tracking.</p><div class="grid"><button id="pathOn">ENABLE</button><button id="pathOff">DISABLE</button></div><button id="pathGet">REFRESH</button><pre id="pathState">Not checked.</pre></div>
 <div class="panel"><h3>IMPORT FLIPPER .IR FILE</h3><label for="irFile">Choose remote file from your phone</label><input id="irFile" type="file" accept=".ir,text/plain"><label for="irName">Filename (letters, digits, underscores, dash)</label><input id="irName" value="CustomRemote.ir"><label for="irText">Flipper IR file text</label><textarea id="irText" placeholder="Filetype: IR signals file&#10;Version: 1&#10;..."></textarea><button id="importIr" class="red">IMPORT TO M5STICK</button><pre id="importState">No file uploaded.</pre></div>
 <div class="panel"><h3>USB DIAGNOSTICS</h3><button id="ping">USB HANDSHAKE</button><button id="usbDevices">SHOW ANDROID USB DEVICES</button><p class="muted">Long-press CONNECT USB at the top to view detected hardware. CH9102F is normally 1A86:55D4.</p><pre id="diagnostics">Ready</pre></div>
@@ -118,6 +165,17 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 const $=id=>document.getElementById(id);
 if(window.SKB_REMOTE_IMAGE)document.querySelector('.tv-shell').style.backgroundImage='url("'+window.SKB_REMOTE_IMAGE+'")';
 let page=0,serial=1,connected=false;
+const themeNames={neon:'Mambo Neon',slate:'Black Slate',lightning:'Purple Lightning',hacker:'Hacker Tech',hidden:'Stealth Minimal'};
+function applyTheme(name,save=true){
+ if(!themeNames[name])name='neon';
+ document.body.dataset.theme=name;
+ document.querySelectorAll('.theme-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===name)));
+ $('themeStatus').textContent='ACTIVE: '+themeNames[name];
+ if(save){try{localStorage.setItem('mambo-theme',name)}catch(e){}}
+}
+document.querySelectorAll('.theme-choice').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.theme)));
+try{applyTheme(localStorage.getItem('mambo-theme')||'neon',false)}catch(e){applyTheme('neon',false)}
+
 const titles=Array.from(document.querySelectorAll('.page')).map(x=>x.dataset.title);
 const pending=new Map();
 const selectors=Array.from(document.querySelectorAll('.page'));
