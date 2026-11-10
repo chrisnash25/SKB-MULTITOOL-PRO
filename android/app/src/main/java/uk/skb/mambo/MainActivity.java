@@ -19,6 +19,9 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import org.json.JSONObject;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
@@ -30,12 +33,14 @@ public class MainActivity extends Activity {
   private static final String USB_PERMISSION="uk.skb.mambo.USB_PERMISSION";
   private final Handler handler=new Handler(Looper.getMainLooper());
   private UsbManager manager;
-  private UsbSerialPort port;
+  private volatile UsbSerialPort port;
   private UsbSerialDriver pendingDriver;
   private TextView usbStatus;
+  private TextView deviceResponse;
+  private Spinner radioMode;
   private WebView web;
   private volatile boolean reading=false;
-  private boolean active=true;
+  private volatile boolean active=true;
   private final Runnable reconnectCheck=new Runnable() {
     @Override public void run() {
       if(!active)return;
@@ -75,6 +80,13 @@ public class MainActivity extends Activity {
     Button usb=new Button(this);usb.setText("Connect USB / request permission");layout.addView(usb);
     Button status=new Button(this);status.setText("USB device status");layout.addView(status);
     Button radio=new Button(this);radio.setText("USB radio status");layout.addView(radio);
+    radioMode=new Spinner(this);
+    radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
+    layout.addView(radioMode);
+    Button selectRadio=new Button(this);selectRadio.setText("Set selected radio (USB)");layout.addView(selectRadio);
+    deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);
+    deviceResponse.setPadding(16,10,16,10);deviceResponse.setText("No USB response yet");
+    layout.addView(deviceResponse);
     Button wifi=new Button(this);wifi.setText("Open Wi-Fi dashboard");layout.addView(wifi);
     web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
     web.setWebViewClient(new WebViewClient(){
@@ -86,6 +98,10 @@ public class MainActivity extends Activity {
     usb.setOnClickListener(v->discover(true));
     status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
     radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
+    selectRadio.setOnClickListener(v->{
+      try {JSONObject cmd=new JSONObject();cmd.put("cmd","radio_select");cmd.put("mode",radioMode.getSelectedItem().toString());send(cmd.toString());}
+      catch(Exception e){announce("Invalid radio selection");}
+    });
     wifi.setOnClickListener(v->web.loadUrl(DEVICE_URL));
     setContentView(layout);web.loadUrl(DEVICE_URL);
     discover(false);
@@ -122,7 +138,7 @@ public class MainActivity extends Activity {
             int n=current.read(buffer,500);
             for(int i=0;i<n;i++){
               char c=(char)(buffer[i]&255);
-              if(c=='\n'){String message=line.toString();line.setLength(0);if(message.startsWith("{"))announce("Device: "+message);}
+              if(c=='\n'){String message=line.toString();line.setLength(0);if(message.startsWith("{"))handleResponse(message);}
               else if(c!='\r' && line.length()<2048)line.append(c);
             }
           } catch(Exception e){break;}
@@ -131,6 +147,20 @@ public class MainActivity extends Activity {
       },"mambo-usb-reader").start();
       send("{\"cmd\":\"status\"}");
     } catch(Exception e){announce("USB connection failed: "+e.getMessage());}
+  }
+  private void handleResponse(String message) {
+    try {
+      JSONObject reply=new JSONObject(message);
+      if(reply.has("selected_mode")) {
+        String mode=reply.optString("selected_mode","none");
+        runOnUiThread(()->{
+          if(radioMode!=null)for(int i=0;i<radioMode.getCount();i++)
+            if(mode.equals(radioMode.getItemAtPosition(i)))radioMode.setSelection(i);
+        });
+      }
+      final String display=reply.toString(2);
+      runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText(display);});
+    } catch(Exception ignored) { announce("Unrecognised USB response"); }
   }
   private void send(String command) {
     UsbSerialPort current=port;
