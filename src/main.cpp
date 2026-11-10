@@ -376,9 +376,9 @@ void setup() {
   M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
   M5.Display.setTextSize(2);
   M5.Display.setCursor(8, 20);
-  M5.Display.println("SKB MULTITOOL");
+  M5.Display.println("MAMBO OS");
   M5.Display.setTextSize(1);
-  M5.Display.println("  PRO");
+  M5.Display.println("  FIRMWARE");
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(apName);
   skbBadBleInit();
@@ -409,7 +409,7 @@ void setup() {
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SKB MULTITOOL PRO</title>
+<title>Mambo OS Firmware</title>
 <style>
 :root{color-scheme:dark;--ink:#090909;--panel:#171717;--line:#4d3636;--blue:#bb3434;--silver:#ded8d5}
 *{box-sizing:border-box}body{margin:0;color:#eee8e5;background:repeating-linear-gradient(115deg,#0b0b0c 0px,#101011 3px,#0b0b0c 6px);font:14px/1.5 system-ui,Arial}
