@@ -99,6 +99,23 @@ class MamboIntegrationTests(unittest.TestCase):
         self.assertIn('#include "mambo_radio_pinmap.h"',probe)
         self.assertNotIn("-D MAMBO_RADIO_HW_VERIFIED", (ROOT / "platformio.ini").read_text())
 
+    def test_mobile_theme_and_brand_controls(self):
+        theme=(ROOT/"include/mambo_mobile_theme.h").read_text()
+        self.assertIn('MAMBO_MOBILE_CSS',theme)
+        self.assertIn('mambo-brand-strip',theme)
+        self.assertIn('server.on("/mambo.css", HTTP_GET',self.main)
+        self.assertIn('<link rel="stylesheet" href="/mambo.css">',self.main)
+        for kind in ('icon','portrait','skb'):
+            self.assertIn('"/api/mambo/brand/'+kind+'"',self.main)
+            self.assertIn('mambo-brand-input-'+kind,self.main)
+
+    def test_radio_buttons_wired(self):
+        for item in ('mambo-set','mambo-refresh','mambo-probe','mambo-cc-rssi',
+                     'mambo-nrf-sample','mambo-download','mambo-inspect','mambo-analyse'):
+            self.assertIn("getElementById('"+item+"').onclick",self.main)
+        self.assertIn('mamboToggleMode',self.main)
+        self.assertIn('mamboShowResult(result)',self.main)
+
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
         self.assertIn("actions/upload-artifact", self.workflow)
