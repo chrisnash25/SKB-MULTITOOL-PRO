@@ -14,7 +14,7 @@
 - [ ] Wire the read-only SPI probe into runtime only after pin validation.
 - [ ] Test detection and read-only measurements on physical modules.
 - [ ] Validate latest firmware binary via GitHub Actions and flash test.
-- [ ] Create and build a native Android companion APK.
+- [x] Add native Android companion source and APK build workflow (WebView-based device dashboard).\n- [ ] Verify Android CI passes and install/debug the resulting APK on an Android 15 phone.
 - [ ] Add offline protocol-analysis fixtures and regression tests.
 - [ ] Validate existing Mambo OS branding across app and dashboard.
 
