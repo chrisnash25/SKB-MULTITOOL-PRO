@@ -35,3 +35,8 @@ GND, VCC 3.3 V, CE, CSN, SCK, MOSI, MISO, IRQ. **Owner confirms their two specif
 Both modules must have correctly regulated **3.3 V**, never 5 V on the radio VCC. PA/LNA high-power boards may require more supply current than an M5StickC Plus2 pin can safely deliver. Direct connection without extra parts depends on the exact modules, their peak current requirements, and available IO pins.
 
 **Before enabling hardware probing:** map the depicted M5StickC Plus2 GPIO routing into a documented, safe pin configuration and check the 3.3 V current budget. The owner's same-order socket confirmation applies to their actual two boards; it does not validate power delivery or a GPIO that the ESP32 cannot output on. This does not require an SD card, transistor or external controller.
+
+## Additional pinout reference supplied by owner (10 November 2026)
+Gemini share: https://share.gemini.google/VPJnJaUOttgy
+
+**Verification status:** The share link could not be read by the build assistant. Its wiring and GPIO values have not been extracted or checked. Do not set `MAMBO_RADIO_HW_VERIFIED` or assign SPI pins from this inaccessible source. A directly uploaded screenshot or the text pin-to-pin mapping is required for electrical validation.
