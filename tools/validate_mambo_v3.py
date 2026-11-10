@@ -53,6 +53,12 @@ class MamboIntegrationTests(unittest.TestCase):
         self.assertNotIn('TextToSpeech',self.android)
         self.assertNotIn('voice.speak',self.android)
 
+    def test_offline_radio_observation_import(self):
+        for marker in ('mambo-observations', 'mambo-analyse', 'frequency_mhz',
+                       'power_dbm', 'row.detected===true', 'rows.length>512',
+                       'OFFLINE IMPORT ONLY'):
+            self.assertIn(marker,self.main)
+
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
         self.assertIn("actions/upload-artifact", self.workflow)
