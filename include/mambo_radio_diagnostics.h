@@ -23,14 +23,18 @@ inline void fillDiagnostics(JsonDocument& doc, const String& mode) {
   doc["probe_available"]=false;
   doc["reason"]="GPIO output assignments and supply not electrically validated";
 #endif
-  doc["physical_monitoring"]="unavailable";
+#ifdef MAMBO_RADIO_HW_VERIFIED
+  doc["physical_monitoring"]="available_on_explicit_request_unverified_on_hardware";
+#else
+  doc["physical_monitoring"]="disabled_in_default_build";
+#endif
   doc["transmission_enabled"]=false;
   doc["swap_requires_power_off"]=true;
   doc["connection"]="software_only";
   doc["cc1101"]["ready"]=false;
   doc["nrf24"]["ready"]=false;
-  doc["cc1101"]["capabilities"]="SPI identification scaffold; no configured RX/RSSI sampling";
-  doc["nrf24"]["capabilities"]="SPI identification scaffold; no configured RPD channel sampling";
+  doc["cc1101"]["capabilities"]="Gated 433 MHz RX RSSI bins, uncalibrated";
+  doc["nrf24"]["capabilities"]="Gated nRF24 binary RPD channel sampling";
   doc["sample_format"]="offline JSON array of frequency/channel and observed power";
   doc["note"]="Selection is a saved preference, not proof of module presence";
 }
