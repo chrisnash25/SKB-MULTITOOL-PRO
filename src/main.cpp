@@ -39,20 +39,26 @@ static void mamboRadioSelect() {
   mamboRadioStatus();
 }
 static void mamboSubInspect() {
-  if(server.arg("plain").length()>8192) {server.send(413,"application/json",R"({"ok":false,"error":"file_too_large"})");return;}
   String body=server.arg("plain");
+  if(body.length()>8192) {server.send(413,"application/json",R"({"ok":false,"error":"file_too_large"})");return;}
   if(!body.startsWith("Filetype: Flipper SubGhz")) {server.send(400,"application/json",R"({"ok":false,"error":"unsupported_sub_header"})");return;}
   JsonDocument d;d["ok"]=true;d["type"]="sub_metadata_preview";d["transmission_enabled"]=false;
   const char* keys[]={"Version","Frequency","Preset","Protocol","Bit"};
-  for(const char* key:keys) {
-    String prefix=String(key)+": ";
-    int pos=body.indexOf("\\n"+prefix);
-    if(pos<0 && body.startsWith(prefix))pos=-1;
-    if(pos>=0)pos+=1;else if(!body.startsWith(prefix))continue;else pos=0;
-    int start=pos+prefix.length();int end=body.indexOf('\\n',start);if(end<0)end=body.length();
-    String value=body.substring(start,end);value.trim();
-    if(value.length()>100)value=value.substring(0,100);
-    d[key]=value;
+  int cursor=0;
+  while(cursor<body.length()) {
+    int end=body.indexOf('\n',cursor);
+    if(end<0)end=body.length();
+    String line=body.substring(cursor,end);
+    line.trim();
+    for(const char* key:keys) {
+      String prefix=String(key)+":";
+      if(line.startsWith(prefix)) {
+        String value=line.substring(prefix.length());value.trim();
+        if(value.length()>100)value=value.substring(0,100);
+        d[key]=value;
+      }
+    }
+    cursor=end+1;
   }
   String out;serializeJson(d,out);server.send(200,"application/json",out);
 }
