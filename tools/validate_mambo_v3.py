@@ -99,6 +99,12 @@ class MamboIntegrationTests(unittest.TestCase):
         self.assertIn('#include "mambo_radio_pinmap.h"',probe)
         self.assertNotIn("-D MAMBO_RADIO_HW_VERIFIED", (ROOT / "platformio.ini").read_text())
 
+    def test_brand_filesystem_declaration_order(self):
+        self.assertLess(self.main.index("static bool filesystemReady = false;"),
+                        self.main.index("static void mamboBrandUploadHandler()"))
+        self.assertLess(self.main.index("static bool filesystemReady = false;"),
+                        self.main.index("static void mamboBrandServe("))
+
     def test_mobile_theme_and_brand_controls(self):
         theme=(ROOT/"include/mambo_mobile_theme.h").read_text()
         self.assertIn('MAMBO_MOBILE_CSS',theme)
