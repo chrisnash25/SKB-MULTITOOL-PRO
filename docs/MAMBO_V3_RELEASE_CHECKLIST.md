@@ -7,7 +7,10 @@
 - [x] Shared USB/HTTP radio diagnostics with explicit detection and radio-transmission limitations.
 - [x] Persisted single-module preference: none / CC1101 / nRF24.
 - [x] Read-only SPI chip-status probe, **disabled in default builds** and gated by verified compile-time GPIO assignments.
-- [x] ESP32 pin-role validation for radio SPI outputs.
+- [x] ESP32 pin-role validation for radio SPI outputs, including protection for flash-bus pins 6-11.
+- [x] Optional compile-gated CC1101 RX RSSI at 433.92 MHz (uncalibrated until hardware verified).
+- [x] Optional compile-gated nRF24 receive-only RPD sampling across 1-16 requested channels (binary threshold, not RSSI).
+- [x] USB and HTTP routes and Android/web controls for both measurement paths.
 - [x] Web UI offline observation analysis from bounded imported JSON, plus .sub metadata inspection.
 - [x] Python source-level regression checks for transport integration, probe gate, Android controls and diagnostics.
 - [x] CI JavaScript syntax check for the firmware-embedded dashboard, including Radio Lab.
@@ -15,8 +18,9 @@
 ## Not implemented / not proved
 - [ ] Safe M5StickC Plus2 GPIO and power profile for *this exact physical socket* (supplied sketch includes optional transistor, SD hardware, and 5V which are excluded from the final design).
 - [ ] Read-only hardware probe enabled in a physically validated build.
-- [ ] Live CC1101 RX RSSI sweep and nRF24 RPD channel observations (neither is live today).
-- [ ] Actual hardware module detection on both swappable radios.
+- [ ] Confirm CC1101 single-frequency RSSI and nRF24 RPD actually work on this physical board; optional drivers have not been hardware-tested.
+- [ ] Implement a calibrated CC1101 frequency sweep only after an RF front-end profile and legal band are verified.
+- [ ] Actual hardware module detection on both swappable radios, with physical wiring and voltage validation.
 - [ ] Complete USB parity for every legacy web dashboard feature; current USB controls focus on device and radio status/selection.
 - [ ] Authentication and access control for management channels.
 - [ ] Verified original Mambo artwork in Android and web dashboard.
@@ -32,4 +36,4 @@ Default build has NO external radio GPIO probing, because the socket's actual M5
 After physical validation, a custom PlatformIO environment can define:
 `MAMBO_RADIO_HW_VERIFIED`, `MAMBO_RADIO_PIN_SCK`, `MAMBO_RADIO_PIN_MISO`, `MAMBO_RADIO_PIN_MOSI`, `MAMBO_RADIO_PIN_CSN`, `MAMBO_RADIO_PIN_CONTROL`, optionally `MAMBO_RADIO_PIN_IRQ`. Do **not** copy pin assignments from the illustrative wiring image without checking them against the actual connector.
 
-**No live RF measurements, packet capture, RF transmission, rolling-code credential recovery, or access-control replay is provided.** Successful compilation alone is not a hardware acceptance test.
+**The default build does not read the external radios.** An explicitly verified custom build contains CC1101 single-frequency RSSI and nRF24 RPD sampling code; these drivers are untested on physical hardware. No packet capture, RF transmission, rolling-code credential recovery, or access-control replay is provided. Successful compilation alone is not a hardware acceptance test.
