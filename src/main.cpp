@@ -16,6 +16,7 @@
 
 #include "mambo_radio_lab.h"
 #include "mambo_radio_diagnostics.h"
+#include "mambo_radio_probe.h"
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
@@ -317,6 +318,8 @@ void onSerialLine(const String& line) {
     response["hardware_detected"]=false;
   } else if (cmd == "radio_status") {
     MamboRadio::fillDiagnostics(response,mamboRadioMode);
+  } else if (cmd == "radio_probe") {
+    MamboRadio::probeReadOnly(response,mamboRadioMode);
   } else if (cmd == "radio_select") {
     String mode=request["mode"] | "";
     if(mode=="none" || mode=="cc1101" || mode=="nrf24") {
@@ -451,6 +454,11 @@ void setup() {
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
   server.on("/api/mambo/diagnostics", HTTP_GET, mamboRadioStatus);
+  server.on("/api/mambo/probe", HTTP_POST, []() {
+    JsonDocument d;MamboRadio::probeReadOnly(d,mamboRadioMode);
+    String out;serializeJson(d,out);
+    server.send(d["ok"].as<bool>()?200:503,"application/json",out);
+  });
   server.on("/api/mambo/radio", HTTP_POST, mamboRadioSelect);
   server.on("/api/mambo/sub/inspect", HTTP_POST, mamboSubInspect);
   server.on("/api/ir/nec", HTTP_POST, sendIR);
