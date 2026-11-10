@@ -21,6 +21,25 @@ pre{font:12px ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere
 .pager{display:flex;align-items:center;justify-content:space-between;gap:7px;background:#100e12;border-top:1px solid #683944;padding:9px 11px calc(9px + env(safe-area-inset-bottom));flex:none}
 .pager button{min-width:85px}.pager span{font-size:11px;white-space:nowrap;font-weight:700}
 table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;border-bottom:1px solid #493139;font-size:12px}
+
+/* SKB remote: portrait control panel, built from the supplied remote layout. */
+.tv-stage{display:none;max-width:470px;margin:3px auto 16px}
+.tv-stage.active{display:block}
+.tv-shell{position:relative;margin:auto;width:min(100%,390px);aspect-ratio:1024 / 1536;border:8px ridge #5f5956;border-radius:11% / 7%;background:repeating-linear-gradient(91deg,#27282a,#4b4747 1px,#27282a 4px);box-shadow:inset 0 0 0 6px #121416,0 10px 24px #000;overflow:hidden}
+.tv-logo{position:absolute;top:5%;left:20%;width:60%;height:18%;background:linear-gradient(125deg,#1b1c20,#444044,#1b1c20);border:5px ridge #827873;border-radius:15%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#ddd5ce;box-shadow:0 3px 10px #000}
+.tv-logo strong{font:900 clamp(34px,13vw,78px) Georgia,serif;line-height:.82;letter-spacing:-9px;text-shadow:2px 4px 2px #000}
+.tv-logo small{font:clamp(9px,2.7vw,16px) Georgia,serif;letter-spacing:1px}
+.tv-shell button{position:absolute;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;border:3px ridge #8d8a85;border-radius:20%;background:linear-gradient(140deg,#dedad3,#595b5b 45%,#aaaaa7 75%,#414346);color:#161719;box-shadow:inset 0 2px 5px #fff7,0 3px 8px #000;font-size:clamp(13px,4vw,24px);font-weight:900;touch-action:manipulation}
+.tv-shell button:active{filter:brightness(1.35);transform:scale(.97)}
+.tv-shell button.round{border-radius:50%}
+.tv-shell button.dpad{background:linear-gradient(145deg,#a6a29c,#3d3e40 64%,#858580);border:none;box-shadow:none;color:#1a1c20}
+.tv-shell button.cmd{font-size:clamp(10px,3.5vw,21px);border-radius:24%}
+.tv-profile{margin:8px 0;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tv-profile strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-popup{display:none;background:#1b191d;border:1px solid #745058;border-radius:9px;padding:13px;margin:8px 0}
+.tv-popup.open{display:block}
+.tv-popup button{margin-top:8px}
+.tv-shell .remote-label{position:absolute;color:#d0c7c0;font-size:clamp(10px,3vw,18px);font-weight:700;text-align:center;pointer-events:none}
 </style></head><body>
 <header class="head"><div class="brand">SKB <em>◆</em> PRO</div><div class="sub">USB OTG CONTROL CONSOLE · M5STICKC PLUS2</div></header>
 <div class="connection"><span id="connection"><span class="dot">●</span> USB DISCONNECTED</span><span>115200 · SERIAL</span></div>
@@ -31,10 +50,38 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div class="panel"><h3>QUICK ACCESS</h3><div class="grid"><button data-goto="1">TV REMOTES</button><button data-goto="2">MONITOR POWER</button><button data-goto="3">WI-FI SCAN</button><button data-goto="4">BLUETOOTH</button></div></div>
 <div class="panel"><h3>CONNECTION MODE</h3><p class="muted">Commands are sent over the USB-C OTG cable, not the SKB Wi-Fi hotspot. Your Samsung phone can stay connected to your normal Wi-Fi or mobile internet. Existing device Wi-Fi dashboard remains available as backup.</p></div>
 </section>
-<section class="page" data-title="TV IR"><h2>TV infrared controller</h2>
-<div class="panel"><h3>SELECT STORED REMOTE</h3><label for="remoteSelect">TV remote file</label><select id="remoteSelect"></select><button id="refreshRemotes">REFRESH REMOTES</button><button id="loadRemote">LOAD KEYS</button><pre id="irState">Select a remote to show its buttons.</pre></div>
-<div class="panel"><h3>ONE-TAP REMOTE</h3><div id="remoteButtons" class="remote"></div><p class="muted">No confirmation pop-ups. Each tap sends one IR command. Point the M5Stick at your own TV.</p></div>
-<div class="panel"><h3>QUICK POWER</h3><div class="grid"><button class="red" data-tvbrand="Samsung">SAMSUNG POWER</button><button class="red" data-tvbrand="LG">LG POWER</button></div></div>
+<section class="page" data-title="TV IR"><h2>TV remote controller</h2>
+<div class="tv-profile"><strong id="tvActiveName">NO REMOTE LOADED</strong><button id="tvChange">CHANGE</button></div>
+<div id="tvSelector" class="tv-popup open"><h3>CHOOSE A REMOTE</h3>
+<select id="remoteSelect"></select><div class="grid"><button id="refreshRemotes">SEARCH REMOTES</button><button id="loadRemote" class="red">LOAD REMOTE</button></div>
+<button id="tvImportOpen">UPLOAD ANOTHER REMOTE</button><p class="muted">Import a Flipper-format .ir profile from the remote library; your SKB controller keeps the same button layout.</p></div>
+<div id="tvStage" class="tv-stage">
+<div class="tv-shell" aria-label="SKB metallic TV remote">
+<div class="tv-logo"><strong>SKB</strong><small>MADE BY</small><small>CHRIS NASH</small></div>
+<button class="round dpad" style="left:37%;top:33%;width:26%;height:10%" data-tvkey="up" aria-label="Up">▲</button>
+<button class="round dpad" style="left:23%;top:38%;width:18%;height:11%" data-tvkey="left" aria-label="Left">◀</button>
+<button class="round dpad" style="left:59%;top:38%;width:18%;height:11%" data-tvkey="right" aria-label="Right">▶</button>
+<button class="round dpad" style="left:37%;top:48%;width:26%;height:10%" data-tvkey="down" aria-label="Down">▼</button>
+<button class="round" style="left:42%;top:40%;width:16%;height:11%" data-tvkey="ok">OK</button>
+<button style="left:10%;top:49%;width:22%;height:8%" data-tvkey="volumeup" aria-label="Volume up">+</button>
+<div class="remote-label" style="left:10%;top:57%;width:22%">VOL</div>
+<button style="left:10%;top:62%;width:22%;height:8%" data-tvkey="volumedown" aria-label="Volume down">−</button>
+<button style="left:68%;top:49%;width:22%;height:8%" data-tvkey="channelup" aria-label="Channel up">⌃</button>
+<div class="remote-label" style="left:68%;top:57%;width:22%">CH</div>
+<button style="left:68%;top:62%;width:22%;height:8%" data-tvkey="channeldown" aria-label="Channel down">⌄</button>
+<button class="cmd" style="left:9%;top:75%;width:20%;height:10%" data-tvkey="source">⇥</button>
+<button class="cmd" style="left:31%;top:75%;width:20%;height:10%" data-tvkey="settings">⚙</button>
+<button class="cmd" style="left:53%;top:75%;width:20%;height:10%" data-tvkey="menu">☰</button>
+<button class="cmd" style="left:75%;top:75%;width:20%;height:10%" id="tvSearchRemote">⌕</button>
+<div class="remote-label" style="left:9%;top:87%;width:20%">SOURCE</div>
+<div class="remote-label" style="left:31%;top:87%;width:20%">SETTINGS</div>
+<div class="remote-label" style="left:53%;top:87%;width:20%">MENU</div>
+<div class="remote-label" style="left:75%;top:87%;width:20%">SEARCH</div>
+<button class="cmd" style="left:39%;top:59%;width:22%;height:10%" data-tvkey="back">BACK</button>
+<button class="round" style="left:79%;top:28%;width:13%;height:8%;font-size:17px;background:linear-gradient(#df8190,#a52e46)" data-tvkey="power">⏻</button>
+</div></div>
+<pre id="irState">Select a remote from your library to begin.</pre>
+<div class="panel"><h3>OTHER KEYS ON THIS REMOTE</h3><div id="remoteButtons" class="remote"></div><p class="muted">If a key isn't included in the selected IR profile, the remote tells you rather than sending an unrelated command. Some IR protocols need firmware support.</p></div>
 </section>
 <section class="page" data-title="MONITORS"><h2>Monitor power library</h2><p class="muted">Eight power-only profiles from Flipper IRDB. Single tap to transmit.</p>
 <div class="panel"><div id="monitorButtons" class="grid"></div><pre id="monitorState">Choose a monitor.</pre></div></section>
@@ -93,10 +140,30 @@ const monitor=[
 ['Monoprice 43305','Monitor_Monoprice_43305.ir'],
 ['Philips Evnia','Monitor_Philips_Evnia_49M2C8900L.ir']];
 for(const [name,file] of monitor){const b=document.createElement('button');b.textContent=name+' POWER';b.onclick=async()=>{const r=await run('monitorState','usb_ir_send',{file,key:'Power'});if(r)setText('monitorState',name+': IR sent (monitor response unverified)')};$('monitorButtons').append(b);}
+let tvKeys=[],tvFile='';
+const keyAliases={
+ power:['power','power_toggle','on_off','onoff','standby','turn_on','poweron'],
+ up:['up','arrow_up','cursor_up','nav_up'],down:['down','arrow_down','cursor_down','nav_down'],
+ left:['left','arrow_left','cursor_left','nav_left'],right:['right','arrow_right','cursor_right','nav_right'],
+ ok:['ok','enter','select','confirm','center','middle'],
+ volumeup:['vol_up','volume_up','volume+','vol+','volplus','volumeplus','volumeup'],
+ volumedown:['vol_down','volume_down','volume-','vol-','volminus','volumedown'],
+ channelup:['ch_up','channel_up','channel+','ch+','channelup','programme_up','program_up'],
+ channeldown:['ch_down','channel_down','channel-','ch-','channeldown','programme_down','program_down'],
+ source:['source','input','input_select','av','inputs'],settings:['settings','setup','options','gear'],
+ menu:['menu','home','main_menu'],back:['back','return','exit']
+};
+function normalizedKey(t){return String(t).toLowerCase().replace(/[^a-z0-9+\-]/g,'');}
+function matchTvKey(action){const keys=keyAliases[action]||[action];for(const alias of keys){const match=tvKeys.find(k=>normalizedKey(k.name)===normalizedKey(alias));if(match)return match.name}return null}
+async function sendTvKey(action){const key=matchTvKey(action);if(!key){setText('irState',action.toUpperCase()+' not available in '+tvFile);return}const r=await run('irState','usb_ir_send',{file:tvFile,key});if(r)setText('irState',key+' sent · TV response not verified')}
+document.querySelectorAll('[data-tvkey]').forEach(button=>button.onclick=()=>sendTvKey(button.dataset.tvkey));
+function chooseTvRemote(){$('tvSelector').classList.add('open');$('tvStage').classList.remove('active');refreshRemotes();}
+$('tvChange').onclick=chooseTvRemote;$('tvSearchRemote').onclick=chooseTvRemote;
+$('tvImportOpen').onclick=()=>{show(titles.indexOf('SETTINGS'));$('irName').focus();setText('importState','Paste a Flipper .ir file below and press IMPORT TO M5STICK. Then return to TV IR and refresh remotes.');};
 $('refreshRemotes').onclick=refreshRemotes;
-async function refreshRemotes(){const r=await run('irState','usb_ir_library');if(!r)return;const options=r.files.filter(x=>!x.name.startsWith('Monitor_'));$('remoteSelect').replaceChildren();for(const item of options){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');$('remoteSelect').append(opt);}setText('irState',options.length+' TV remote files available.');if(options.length)loadRemote();}
+async function refreshRemotes(){const r=await run('irState','usb_ir_library');if(!r)return;const previous=$('remoteSelect').value;const options=r.files.filter(x=>!x.name.startsWith('Monitor_'));$('remoteSelect').replaceChildren();for(const item of options){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');$('remoteSelect').append(opt)}if(options.some(x=>x.name===previous))$('remoteSelect').value=previous;setText('irState',options.length+' stored TV remotes available. Choose one and press LOAD REMOTE.');}
 $('loadRemote').onclick=loadRemote;
-async function loadRemote(){const file=$('remoteSelect').value;const target=$('remoteButtons');target.replaceChildren();if(!file)return;const r=await run('irState','usb_ir_keys',{file});if(!r)return;for(const item of r.keys){const b=document.createElement('button');b.textContent=item.name.replaceAll('_',' ');if(/power|on.off/i.test(item.name))b.classList.add('power');b.onclick=async()=>{const result=await run('irState','usb_ir_send',{file,key:item.name});if(result)setText('irState',item.name+' IR transmitted · target state not verified')};target.append(b);}setText('irState',r.keys.length+' buttons loaded · '+file);}
+async function loadRemote(){const file=$('remoteSelect').value;if(!file)return;const r=await run('irState','usb_ir_keys',{file});if(!r)return;tvFile=file;tvKeys=r.keys||[];$('tvActiveName').textContent=file.replace(/_/g,' ').replace(/\.ir$/,'');$('tvStage').classList.add('active');$('tvSelector').classList.remove('open');const target=$('remoteButtons');target.replaceChildren();const used=new Set(Object.keys(keyAliases).map(matchTvKey).filter(Boolean));for(const item of tvKeys){if(used.has(item.name))continue;const b=document.createElement('button');b.textContent=item.name.replaceAll('_',' ');b.onclick=()=>run('irState','usb_ir_send',{file,key:item.name});target.append(b);}setText('irState',tvKeys.length+' keys loaded · '+file+' · tap controls to transmit');}
 document.querySelectorAll('[data-tvbrand]').forEach(b=>b.onclick=()=>run('irState','usb_ir_tv_power',{brand:b.dataset.tvbrand}));
 $('scanWifi').onclick=()=>run('wifiState','usb_wifi_scan');
 $('wifiResults').onclick=async()=>{const r=await run('wifiState','usb_wifi_results');const list=$('wifiList');list.replaceChildren();if(!r||!r.networks)return;for(const ap of r.networks){const row=document.createElement('div');row.className='panel';row.textContent=(ap.ssid||'(hidden)')+' · '+ap.rssi+' dBm · CH '+ap.channel;list.append(row);}};
@@ -116,7 +183,7 @@ setText('importState','Uploading...');
 try{
 await rpc('usb_ir_import_begin',{file:name});
 for(let i=0;i<body.length;i+=180){const chunk=body.slice(i,i+180);await rpc('usb_ir_import_chunk',{data:chunk});setText('importState','Uploaded '+Math.min(i+180,body.length)+' / '+body.length);}
-const r=await rpc('usb_ir_import_end');setText('importState',r);await refreshRemotes();
+const r=await rpc('usb_ir_import_end');setText('importState',r);await refreshRemotes();show(titles.indexOf('TV IR'));$('tvSelector').classList.add('open');
 }catch(e){setText('importState','Upload failed: '+uiError(e));try{await rpc('usb_ir_import_abort')}catch(ignored){}}
 };
 async function hidRpc(action,params={}){return rpc('usb_badble',{action,...params})}
