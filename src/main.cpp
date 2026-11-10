@@ -8,8 +8,12 @@
 #include <BLEScan.h>
 #include <IRremote.hpp>
 #include <LittleFS.h>
+#include <DNSServer.h>
+#include "wifi/WifiDiagnostics.h"
 
 static WebServer server(80);
+static DNSServer portalDns;
+static WifiDiagnostics wifiDiagnostics;
 static constexpr uint8_t IR_PIN = 19;
 static bool filesystemReady = false;
 static File logoUploadFile;
@@ -51,62 +55,27 @@ void setPathShieldEnabled() {
 
 static const char* apName = "SKB-MULTITOOL-PRO";
 static String input;
-static bool wifiScanning = false;
-static unsigned long scanStarted = 0;
-static String cachedWifiJson = "{\"ok\":true,\"state\":\"idle\",\"networks\":[]}";
-static String cachedSignalJson = "{\"ok\":true,\"source\":\"last_wifi_scan\",\"live\":false,\"signals\":[]}";
-
-void startWifiScan() {
-  if (wifiScanning) { server.send(409, "application/json", "{\"ok\":false,\"error\":\"scan_running\"}"); return; }
-  WiFi.scanDelete();
-  WiFi.scanNetworks(true, true);
-  wifiScanning = true;
-  scanStarted = millis();
-  server.send(202, "application/json", "{\"ok\":true,\"state\":\"scanning\"}");
-}
-
-void wifiResults() {
-  JsonDocument doc;
-  int n = WiFi.scanComplete();
-  if (n == WIFI_SCAN_RUNNING) {
-    if (millis() - scanStarted > 15000) { WiFi.scanDelete(); wifiScanning = false; server.send(504, "application/json", "{\"ok\":false,\"error\":\"scan_timeout\"}"); return; }
-    doc["state"] = "scanning";
-  } else if (n < 0) {
-    wifiScanning = false;
-    doc["state"] = "idle";
-  } else {
-    wifiScanning = false;
-    doc["state"] = "complete";
-    JsonArray aps = doc["networks"].to<JsonArray>();
-    for (int i=0; i<n && i<64; ++i) {
-      JsonObject ap = aps.add<JsonObject>();
-      ap["ssid"] = WiFi.SSID(i);
-      ap["bssid"] = WiFi.BSSIDstr(i);
-      ap["rssi"] = WiFi.RSSI(i);
-      ap["channel"] = WiFi.channel(i);
-      ap["encryption"] = static_cast<int>(WiFi.encryptionType(i));
+// Shared HTTP/USB handlers keep command semantics identical across transports.
+void wifiHttp(const String& cmd) {
+  JsonDocument request, response;
+  if (cmd == "config.set") {
+    if (!server.header("Content-Type").startsWith("application/json") ||
+        server.arg("plain").length() > 256 ||
+        deserializeJson(request, server.arg("plain"))) {
+      server.send(400,"application/json","{\"ok\":false,\"error\":\"invalid_json_body\"}"); return;
     }
-    JsonDocument signalDoc;
-    signalDoc["ok"] = true;
-    signalDoc["source"] = "last_wifi_scan";
-    signalDoc["live"] = false;
-    JsonArray signalArray = signalDoc["signals"].to<JsonArray>();
-    for (int i=0; i<n && i<64; ++i) {
-      JsonObject entry = signalArray.add<JsonObject>();
-      entry["ssid"] = WiFi.SSID(i);
-      entry["bssid"] = WiFi.BSSIDstr(i);
-      entry["rssi"] = WiFi.RSSI(i);
-      entry["channel"] = WiFi.channel(i);
+    String origin = server.header("Origin");
+    String local = "http://" + WiFi.softAPIP().toString();
+    if (origin.length() && origin != local && origin != local + ":80") {
+      server.send(403,"application/json","{\"ok\":false,\"error\":\"invalid_origin\"}"); return;
     }
-    cachedSignalJson = "";
-    serializeJson(signalDoc,cachedSignalJson);
-    WiFi.scanDelete();
   }
-  doc["ok"] = true;
-  String json; serializeJson(doc,json);
-  if (n >= 0) cachedWifiJson = json;
-  server.send(200,"application/json",json);
+  int status = wifiDiagnostics.command(cmd, request.as<JsonVariantConst>(), response);
+  String json; serializeJson(response,json);
+  server.send(status ? status : 404,"application/json",json);
 }
+void startWifiScan() { wifiHttp("wifi.scan"); }
+void wifiResults() { wifiHttp("wifi.results"); }
 
 
 void scanBle() {
@@ -229,6 +198,8 @@ void onSerialLine(const String& line) {
     response["uptime_ms"] = millis();
     response["free_heap"] = ESP.getFreeHeap();
     response["battery_voltage"] = M5.Power.getBatteryVoltage();
+  } else if (wifiDiagnostics.command(cmd, request.as<JsonVariantConst>(), response)) {
+    // Additive commands; existing status response stays unchanged.
   } else {
     response["ok"] = false;
     response["error"] = "unknown_command";
@@ -285,6 +256,10 @@ void setup() {
   M5.Display.println("  PRO");
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(apName);
+  wifiDiagnostics.begin(skbPrefs);
+  portalDns.start(53,"*",WiFi.softAPIP());
+  const char* headers[] = {"Content-Type", "Origin"};
+  server.collectHeaders(headers,2);
   BLEDevice::init("SKB-MULTITOOL-PRO");
   bleScanner = BLEDevice::getScan();
   bleScanner->setActiveScan(false);
@@ -298,7 +273,11 @@ void setup() {
   server.on("/api/pathshield", HTTP_POST, setPathShieldEnabled);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
   server.on("/api/wifi/results", HTTP_GET, wifiResults);
-  server.on("/api/signal/wifi", HTTP_GET, []() { server.send(200,"application/json",cachedSignalJson); });
+  server.on("/api/signal/wifi", HTTP_GET, []() { wifiHttp("wifi.signals"); });
+  server.on("/api/wifi/channels", HTTP_GET, [](){wifiHttp("wifi.channels");});
+  server.on("/api/wifi/devices", HTTP_GET, [](){wifiHttp("wifi.devices");});
+  server.on("/api/config", HTTP_GET, [](){wifiHttp("config.get");});
+  server.on("/api/config", HTTP_POST, [](){wifiHttp("config.set");});
   server.on("/", HTTP_GET, []() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -331,10 +310,14 @@ a{color:#7bdcff}.nav{display:flex;gap:8px;overflow:auto;padding:0 0 14px}.nav a{
 <section id="bluetooth" class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
 <section id="privacy" class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification and last-scan counts. These are not proof of unwanted tracking.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
-<section id="wifi" class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
+<section id="wifi" class="panel"><h2>Passive Wi-Fi diagnostics</h2><p class="muted">2.4 GHz AP beacons only. Scans do not send probe requests. Off-channel scanning may briefly affect this dashboard. Observations are snapshots, not measured airtime or a list of all nearby client devices.</p><pre id="networks">Tap Scan to discover networks.</pre><button onclick="wifiDetails()">Channels and devices</button><pre id="wifi-details">No readings yet</pre></section>
+<section class="panel"><h2>Local device configuration</h2><p class="muted">SKB device settings only. This portal never requests account or network passwords. This management AP is open; anyone connected can change these non-secret settings.</p><label>Device label <input id="device-label" type="text" maxlength="32"></label><label>Passive scan dwell per channel (100–500 ms) <input id="scan-dwell" type="number" min="100" max="500"></label><button onclick="saveConfig()">Save settings</button><pre id="config-result">Loading...</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
 </main><script>
-async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm'+(n.tracker_candidate?' ['+n.tracker_candidate+']':'')).join('\\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2);pathShieldStatus()}catch(e){el.textContent=String(e)}}
+async function wifiDetails(){const el=document.getElementById('wifi-details');try{const values=await Promise.all(['/api/wifi/channels','/api/wifi/devices'].map(async url=>{const r=await fetch(url);if(!r.ok)throw Error('HTTP '+r.status);return r.json()}));el.textContent=JSON.stringify({channels:values[0],devices:values[1]},null,2)}catch(e){el.textContent=String(e)}}
+async function loadConfig(){try{const r=await fetch('/api/config');if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();document.getElementById('device-label').value=d.label;document.getElementById('scan-dwell').value=d.scan_dwell_ms;document.getElementById('config-result').textContent='Settings loaded'}catch(e){document.getElementById('config-result').textContent=String(e)}}
+async function saveConfig(){try{const label=document.getElementById('device-label').value,scan_dwell_ms=Number(document.getElementById('scan-dwell').value);if(!label||new TextEncoder().encode(label).length>32||!Number.isInteger(scan_dwell_ms)||scan_dwell_ms<100||scan_dwell_ms>500)throw Error('Label: 1–32 bytes; dwell: 100–500 ms');const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,scan_dwell_ms})});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));document.getElementById('config-result').textContent='Settings saved'}catch(e){document.getElementById('config-result').textContent=String(e)}}
+async function scanBle(){const el=document.getElementById('ble-results');el.textContent='Scanning for 3 seconds...';try{const r=await fetch('/api/ble/scan');const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));el.textContent=(d.devices||[]).map(n=>(n.name||'Unnamed')+'  '+n.address+'  '+n.rssi+' dBm'+(n.tracker_candidate?' ['+n.tracker_candidate+']':'')).join('\n')||'No BLE advertisements found';document.getElementById('ble-tracking').textContent=JSON.stringify(d.tracking,null,2);pathShieldStatus()}catch(e){el.textContent=String(e)}}
 async function saveBleTarget(){const address=document.getElementById('ble-target').value;try{const r=await fetch('/api/ble/tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});const d=await r.json();document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('ble-tracking').textContent=String(e)}}
 async function clearBleTarget(){document.getElementById('ble-target').value='';saveBleTarget()}
 async function loadBleTarget(){try{const d=await (await fetch('/api/ble/tracking')).json();document.getElementById('ble-target').value=d.address||'';document.getElementById('ble-tracking').textContent=JSON.stringify(d,null,2)}catch(e){}}
@@ -342,11 +325,11 @@ async function sendIr(){try{const a=document.getElementById('ir-address').value,
 async function uploadBrandLogo(){const f=document.getElementById('logo-file').files[0];if(!f||f.type!=='image/png'||f.size>150000){document.getElementById('logo-result').textContent='Select a PNG under 150 KB';return}const data=new FormData();data.append('file',f);const r=await fetch('/api/logo',{method:'POST',body:data});document.getElementById('logo-result').textContent=JSON.stringify(await r.json());document.querySelector('.hero img').src='/logo.png?t='+Date.now()}
 async function statusNow(){try{const r=await fetch('/api/status');if(!r.ok)throw Error('HTTP '+r.status);document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2);document.querySelector('.status-dot').style.background='#52dba5'}catch(e){document.getElementById('status').textContent='Disconnected';document.querySelector('.status-dot').style.background='#f46b78'}}
 async function scan(){const el=document.getElementById('networks');try{const r=await fetch('/api/wifi/scan',{method:'POST'});if(!r.ok)throw Error(await r.text());el.textContent='Scanning...';poll()}catch(e){el.textContent=String(e)}}
-async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
-async function signalWifi(){try{const d=await (await fetch('/api/signal/wifi')).json();document.getElementById('signal-wifi').textContent=(d.signals||[]).map(n=>n.ssid+' ('+n.bssid+') '+n.rssi+' dBm').join('\\n')||'Run a Wi-Fi scan first'}catch(e){document.getElementById('signal-wifi').textContent=String(e)}}
+async function poll(){try{const r=await fetch('/api/wifi/results');const d=await r.json();if(d.state==='scanning'){setTimeout(poll,1100);return}document.getElementById('networks').textContent=d.state==='complete'?(d.networks||[]).map(n=>n.ssid+'  '+n.rssi+' dBm  CH '+n.channel).join('\n')||'No networks found':JSON.stringify(d)}catch(e){document.getElementById('networks').textContent=String(e)}}
+async function signalWifi(){try{const d=await (await fetch('/api/signal/wifi')).json();document.getElementById('signal-wifi').textContent=(d.signals||[]).map(n=>n.ssid+' ('+n.bssid+') '+n.rssi+' dBm').join('\n')||'Run a Wi-Fi scan first'}catch(e){document.getElementById('signal-wifi').textContent=String(e)}}
 async function pathShieldStatus(){try{const d=await (await fetch('/api/pathshield')).json();document.getElementById('pathshield').checked=!!d.enabled;document.getElementById('pathshield-state').textContent=d.enabled?('Enabled — '+d.alert):'Disabled'}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
 async function setPathShield(enabled){try{const r=await fetch('/api/pathshield',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});if(!r.ok)throw Error(await r.text());pathShieldStatus()}catch(e){document.getElementById('pathshield-state').textContent=String(e)}}
-fetch('/logo.png',{method:'HEAD'}).then(r=>{if(r.ok)document.getElementById('skb-emblem').src='/logo.png'}).catch(()=>{});statusNow();pathShieldStatus();loadBleTarget();setInterval(statusNow,5000);
+fetch('/logo.png',{method:'HEAD'}).then(r=>{if(r.ok)document.getElementById('skb-emblem').src='/logo.png'}).catch(()=>{});statusNow();pathShieldStatus();loadBleTarget();loadConfig();setInterval(statusNow,5000);
 </script></html>
 )SKBHTML");
   });
@@ -354,12 +337,21 @@ fetch('/logo.png',{method:'HEAD'}).then(r=>{if(r.ok)document.getElementById('skb
     if(!filesystemReady || !LittleFS.exists("/logo.png")) {server.send(404,"text/plain","Upload SKB logo PNG using the dashboard");return;}
     File logo=LittleFS.open("/logo.png","r");server.streamFile(logo,"image/png");logo.close();
   });
-  server.onNotFound([](){server.send(404,"application/json","{\"ok\":false,\"error\":\"not_found\"}");});
+  server.onNotFound([](){
+    if (server.uri().startsWith("/api/")) {
+      server.send(404,"application/json","{\"ok\":false,\"error\":\"not_found\"}"); return;
+    }
+    server.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(302,"text/plain","Open SKB local device configuration");
+  });
   server.begin();
 }
 
 void loop() {
   M5.update();
+  portalDns.processNextRequest();
+  wifiDiagnostics.tick();
   server.handleClient();
   while (Serial.available()) {
     char c = Serial.read();
