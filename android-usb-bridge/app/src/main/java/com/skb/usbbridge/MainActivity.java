@@ -54,7 +54,7 @@ public final class MainActivity extends Activity {
             String action = intent.getAction();
             if (PERMISSION_ACTION.equals(action)) {
                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
-                if (granted && pendingDriver != null) openSerial(pendingDriver);
+                if (granted && pendingDriver != null && usbManager.hasPermission(pendingDriver.getDevice())) openSerial(pendingDriver);
                 else setStatus("USB permission denied — reconnect and approve");
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
@@ -119,8 +119,19 @@ public final class MainActivity extends Activity {
         IntentFilter filter = new IntentFilter();
         filter.addAction(PERMISSION_ACTION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        if(Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        if(Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
         else registerReceiver(receiver, filter);
+        // The device may already be connected when the app is launched.
+        if(!usbManager.getDeviceList().isEmpty()) connectUsb();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if(UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())){
+            diagnostics("USB device attached — requesting permission");
+            connectUsb();
+        }
     }
 
     private void setStatus(String value) {
@@ -223,8 +234,9 @@ public final class MainActivity extends Activity {
             UsbSerialPort p=driver.getPorts().get(0);
             p.open(usbConnection);
             p.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-            p.setDTR(true);
-            p.setRTS(true);
+            // DTR is needed by some UART bridges; RTS may reset some boards.
+            try{p.setDTR(true);}catch(Exception ignored){}
+            try{p.setRTS(true);}catch(Exception ignored){}
             port=p;
             listening=true;
             diagnostics("USB connected • "+String.format(java.util.Locale.US,"%04X:%04X",driver.getDevice().getVendorId(),driver.getDevice().getProductId())+" • 115200");
