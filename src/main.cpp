@@ -15,6 +15,7 @@
 #include "skb_ir_monitor_presets.h"
 
 #include "mambo_radio_lab.h"
+static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
 static void mamboRadioStatus() {
@@ -68,7 +69,6 @@ static void mamboSubInspect() {
 static constexpr uint8_t IR_PIN = 19;
 static bool filesystemReady = false;
 static File logoUploadFile;
-static Preferences skbPrefs;
 static BLEScan* bleScanner = nullptr;
 static BLEAdvertising* bleAdvertiser = nullptr;
 static bool bleAdvertisingEnabled = false;
