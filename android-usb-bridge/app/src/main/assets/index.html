@@ -87,6 +87,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <button class="cmd" style="left:42%;top:54%;width:16%;height:8%" data-tvkey="back">BACK</button>
 <button class="round" style="left:77%;top:26%;width:13%;height:7%" data-tvkey="power">⏻</button>
 </div></div>
+<div class="grid"><button id="tvPowerExtra" class="red">POWER</button><button id="tvBackExtra">BACK / RETURN</button></div>
 <pre id="irState">Select a remote from your library to begin.</pre>
 <div class="panel"><h3>OTHER KEYS ON THIS REMOTE</h3><div id="remoteButtons" class="remote"></div><p class="muted">If a key isn't included in the selected IR profile, the remote tells you rather than sending an unrelated command. Some IR protocols need firmware support.</p></div>
 </section>
@@ -107,7 +108,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;text-align:left;
 <div class="grid"><button id="hidSave">SAVE</button><button id="hidDelete">DELETE</button><button class="red" id="hidRun">RUN SELECTED</button><button id="hidStop">STOP</button></div><pre id="hidResult">Select a saved macro to send, only after pairing.</pre></div></section>
 <section class="page" data-title="SETTINGS"><h2>Settings and imports</h2>
 <div class="panel"><h3>PATHSHIELD</h3><p class="muted">Classifies BLE candidates for manual review. Not proof of unwanted tracking.</p><div class="grid"><button id="pathOn">ENABLE</button><button id="pathOff">DISABLE</button></div><button id="pathGet">REFRESH</button><pre id="pathState">Not checked.</pre></div>
-<div class="panel"><h3>IMPORT FLIPPER .IR FILE</h3><label for="irName">Filename (letters, digits, underscores, dash)</label><input id="irName" value="CustomRemote.ir"><label for="irText">Flipper IR file text</label><textarea id="irText" placeholder="Filetype: IR signals file&#10;Version: 1&#10;..."></textarea><button id="importIr" class="red">IMPORT TO M5STICK</button><pre id="importState">No file uploaded.</pre></div>
+<div class="panel"><h3>IMPORT FLIPPER .IR FILE</h3><label for="irFile">Choose remote file from your phone</label><input id="irFile" type="file" accept=".ir,text/plain"><label for="irName">Filename (letters, digits, underscores, dash)</label><input id="irName" value="CustomRemote.ir"><label for="irText">Flipper IR file text</label><textarea id="irText" placeholder="Filetype: IR signals file&#10;Version: 1&#10;..."></textarea><button id="importIr" class="red">IMPORT TO M5STICK</button><pre id="importState">No file uploaded.</pre></div>
 <div class="panel"><h3>USB DIAGNOSTICS</h3><button id="ping">USB HANDSHAKE</button><button id="usbDevices">SHOW ANDROID USB DEVICES</button><p class="muted">Long-press CONNECT USB at the top to view detected hardware. CH9102F is normally 1A86:55D4.</p><pre id="diagnostics">Ready</pre></div>
 </section></main>
 <footer class="pager"><button id="prev">◀ PREV</button><span id="pageLabel">HOME · 1 / 6</span><button id="next">NEXT ▶</button></footer>
@@ -168,6 +169,7 @@ async function sendTvKey(action){const key=matchTvKey(action);if(!key){setText('
 document.querySelectorAll('[data-tvkey]').forEach(button=>button.onclick=()=>sendTvKey(button.dataset.tvkey));
 function chooseTvRemote(){$('tvSelector').classList.add('open');$('tvStage').classList.remove('active');refreshRemotes();}
 $('tvChange').onclick=chooseTvRemote;$('tvSearchRemote').onclick=chooseTvRemote;
+$('tvPowerExtra').onclick=()=>sendTvKey('power');$('tvBackExtra').onclick=()=>sendTvKey('back');
 $('tvImportOpen').onclick=()=>{show(titles.indexOf('SETTINGS'));$('irName').focus();setText('importState','Paste a Flipper .ir file below and press IMPORT TO M5STICK. Then return to TV IR and refresh remotes.');};
 $('refreshRemotes').onclick=refreshRemotes;
 async function refreshRemotes(){const r=await run('irState','usb_ir_library');if(!r)return;const previous=$('remoteSelect').value;const options=r.files.filter(x=>!x.name.startsWith('Monitor_'));$('remoteSelect').replaceChildren();for(const item of options){const opt=document.createElement('option');opt.value=item.name;opt.textContent=item.name.replace(/_/g,' ').replace(/\.ir$/i,'');$('remoteSelect').append(opt)}if(options.some(x=>x.name===previous))$('remoteSelect').value=previous;setText('irState',options.length+' stored TV remotes available. Choose one and press LOAD REMOTE.');}
@@ -184,6 +186,14 @@ $('clearBle').onclick=()=>{ $('bleAddress').value='';return run('trackState','us
 $('pathOn').onclick=()=>run('pathState','usb_pathshield',{enabled:true});
 $('pathOff').onclick=()=>run('pathState','usb_pathshield',{enabled:false});
 $('pathGet').onclick=()=>run('pathState','usb_pathshield');
+$('irFile').addEventListener('change',async event=>{
+ const file=event.target.files[0];if(!file)return;
+ if(!/\.ir$/i.test(file.name)){setText('importState','Choose a .ir remote file');return;}
+ if(file.size>30000){setText('importState','Remote file must be 30 KB or less');return;}
+ $('irName').value=file.name;
+ try{$('irText').value=await file.text();setText('importState','Loaded '+file.name+'; press IMPORT TO M5STICK');}
+ catch(e){setText('importState','Could not read file: '+uiError(e));}
+});
 $('importIr').onclick=async()=>{
 const name=$('irName').value.trim(),body=$('irText').value;
 if(!/^[A-Za-z0-9_.-]{1,55}\.ir$/.test(name)||name.includes('..')){setText('importState','Invalid filename');return;}
