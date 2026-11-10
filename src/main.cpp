@@ -23,6 +23,7 @@
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
+static bool filesystemReady = false;
 static File mamboBrandUpload;
 static String mamboBrandPath;
 static String mamboBrandMime;
@@ -119,7 +120,6 @@ static void mamboSubInspect() {
 }
 
 static constexpr uint8_t IR_PIN = 19;
-static bool filesystemReady = false;
 static File logoUploadFile;
 static BLEScan* bleScanner = nullptr;
 static BLEAdvertising* bleAdvertiser = nullptr;
@@ -569,7 +569,6 @@ void setup() {
     server.send(200, "text/html", R"SKBHTML(
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mambo OS V3 · Radio & Device Lab</title>
-<link rel="stylesheet" href="/mambo.css">
 <style>
 :root{color-scheme:dark;--ink:#090909;--panel:#171717;--line:#4d3636;--blue:#bb3434;--silver:#ded8d5}
 *{box-sizing:border-box}body{margin:0;color:#eee8e5;background:repeating-linear-gradient(115deg,#0b0b0c 0px,#101011 3px,#0b0b0c 6px);font:14px/1.5 system-ui,Arial}
@@ -605,7 +604,7 @@ main{height:100vh;height:100dvh;max-width:640px;display:flex;flex-direction:colu
 .skb-page .panel{margin-bottom:12px}
 .skb-page select{max-width:100%}
 @media(max-width:360px){.skb-pager button{min-width:80px}.skb-tabs button{padding:8px 11px}}
-</style><main><section class="panel" id="tv-power-panel"><h2>TV POWER CONTROL</h2><p class="muted">Select your own TV brand. One power-toggle signal per tap.</p><label for="tv-brand">Verified TV brand</label><select id="tv-brand" style="width:100%;padding:12px;background:#151515;color:white;border:1px solid #794747;border-radius:6px"><option value="Samsung">Samsung</option><option value="LG">LG</option></select><button type="button" id="tv-power-button" style="display:block;width:100%;margin-top:12px">POWER TOGGLE</button><p id="tv-power-result" role="status" class="muted">No command sent</p></section>
+</style><link rel="stylesheet" href="/mambo.css"><main><section class="panel" id="tv-power-panel"><h2>TV POWER CONTROL</h2><p class="muted">Select your own TV brand. One power-toggle signal per tap.</p><label for="tv-brand">Verified TV brand</label><select id="tv-brand" style="width:100%;padding:12px;background:#151515;color:white;border:1px solid #794747;border-radius:6px"><option value="Samsung">Samsung</option><option value="LG">LG</option></select><button type="button" id="tv-power-button" style="display:block;width:100%;margin-top:12px">POWER TOGGLE</button><p id="tv-power-result" role="status" class="muted">No command sent</p></section>
 <script>
 document.getElementById('tv-power-button').addEventListener('click',async()=>{
 const brand=document.getElementById('tv-brand').value;
