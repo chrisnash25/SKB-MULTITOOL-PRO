@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "mambo_radio_lab.h"
+#include "mambo_radio_pinmap.h"
 
 // Compile-time hardware gate: intentionally disabled in the default firmware.
 // Enable only in a variant whose wiring, output GPIOs and 3.3 V budget have
