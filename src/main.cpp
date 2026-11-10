@@ -18,6 +18,7 @@
 #include "mambo_radio_diagnostics.h"
 #include "mambo_radio_probe.h"
 #include "mambo_radio_observe.h"
+#include "mambo_cc1101_observe.h"
 static Preferences skbPrefs;
 static WebServer server(80);
 static String mamboRadioMode = "none";
@@ -321,6 +322,8 @@ void onSerialLine(const String& line) {
     MamboRadio::fillDiagnostics(response,mamboRadioMode);
   } else if (cmd == "radio_probe") {
     MamboRadio::probeReadOnly(response,mamboRadioMode);
+  } else if (cmd == "cc1101_rssi") {
+    MamboRadio::observeCc1101(response,mamboRadioMode);
   } else if (cmd == "radio_observe") {
     const int start=request["start_channel"] | 0;
     const int count=request["count"] | 8;
@@ -459,6 +462,11 @@ void setup() {
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/mambo/radio", HTTP_GET, mamboRadioStatus);
   server.on("/api/mambo/diagnostics", HTTP_GET, mamboRadioStatus);
+  server.on("/api/mambo/cc1101/rssi", HTTP_GET, []() {
+    JsonDocument d;MamboRadio::observeCc1101(d,mamboRadioMode);
+    String out;serializeJson(d,out);
+    server.send(d["ok"].as<bool>()?200:422,"application/json",out);
+  });
   server.on("/api/mambo/observe", HTTP_POST, []() {
     JsonDocument req,d;
     if(deserializeJson(req,server.arg("plain"))) {server.send(400,"application/json",R"({"ok":false,"error":"invalid_json"})");return;}
