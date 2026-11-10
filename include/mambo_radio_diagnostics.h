@@ -15,8 +15,14 @@ inline void fillDiagnostics(JsonDocument& doc, const String& mode) {
   doc["single_module"]=true;
   doc["module_present"]=false;
   doc["hardware_detected"]=false;
-  doc["hardware_detection"]="not_available";
+  doc["hardware_detection"]="not_probed";
+#ifdef MAMBO_RADIO_HW_VERIFIED
+  doc["probe_available"]=true;
+  doc["reason"]="Use explicit read-only SPI probe to check selected radio";
+#else
+  doc["probe_available"]=false;
   doc["reason"]="GPIO output assignments and supply not electrically validated";
+#endif
   doc["physical_monitoring"]="unavailable";
   doc["transmission_enabled"]=false;
   doc["swap_requires_power_off"]=true;
