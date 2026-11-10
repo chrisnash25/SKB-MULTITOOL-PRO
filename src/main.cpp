@@ -311,6 +311,21 @@ void onSerialLine(const String& line) {
     response["uptime_ms"] = millis();
     response["free_heap"] = ESP.getFreeHeap();
     response["battery_voltage"] = M5.Power.getBatteryVoltage();
+  } else if (cmd == "radio_status") {
+    response["ok"]=true;
+    response["selected_mode"]=mamboRadioMode;
+    response["hardware_detected"]=false;
+    response["note"]="Radio GPIO mapping not validated";
+  } else if (cmd == "radio_select") {
+    String mode=request["mode"] | "";
+    if(mode=="none" || mode=="cc1101" || mode=="nrf24") {
+      mamboRadioMode=mode;
+      response["ok"]=true;
+      response["selected_mode"]=mamboRadioMode;
+    } else {
+      response["ok"]=false;
+      response["error"]="invalid_mode";
+    }
   } else {
     response["ok"] = false;
     response["error"] = "unknown_command";
