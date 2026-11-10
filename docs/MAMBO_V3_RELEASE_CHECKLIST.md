@@ -10,6 +10,7 @@
 - [x] ESP32 pin-role validation for radio SPI outputs.
 - [x] Web UI offline observation analysis from bounded imported JSON, plus .sub metadata inspection.
 - [x] Python source-level regression checks for transport integration, probe gate, Android controls and diagnostics.
+- [x] CI JavaScript syntax check for the firmware-embedded dashboard, including Radio Lab.
 
 ## Not implemented / not proved
 - [ ] Safe M5StickC Plus2 GPIO and power profile for *this exact physical socket* (supplied sketch includes optional transistor, SD hardware, and 5V which are excluded from the final design).
