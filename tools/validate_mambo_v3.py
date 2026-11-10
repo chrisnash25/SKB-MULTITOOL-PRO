@@ -30,6 +30,10 @@ class MamboIntegrationTests(unittest.TestCase):
         self.assertIn('d["transmission_enabled"]=false', self.main)
         self.assertNotIn('esp_wifi_80211_tx', self.radio)
 
+    def test_preferences_declared_before_radio_handlers(self):
+        self.assertLess(self.main.index("static Preferences skbPrefs;"), self.main.index("static void mamboRadioSelect()"))
+        self.assertIn('skbPrefs.putString("mambo_radio",mode)', self.main)
+
     def test_ci_build(self):
         self.assertIn("pio run -e m5stick-cplus2", self.workflow)
         self.assertIn("actions/upload-artifact", self.workflow)
