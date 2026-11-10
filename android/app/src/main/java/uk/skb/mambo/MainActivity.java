@@ -82,8 +82,8 @@ public class MainActivity extends Activity {
     });
     layout.addView(web,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
     usb.setOnClickListener(v->discover(true));
-    status.setOnClickListener(v->send("{\\"cmd\\":\\"status\\"}"));
-    radio.setOnClickListener(v->send("{\\"cmd\\":\\"radio_status\\"}"));
+    status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
+    radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
     wifi.setOnClickListener(v->web.loadUrl(DEVICE_URL));
     setContentView(layout);web.loadUrl(DEVICE_URL);
     discover(false);
@@ -119,20 +119,20 @@ public class MainActivity extends Activity {
             int n=current.read(buffer,500);
             for(int i=0;i<n;i++){
               char c=(char)(buffer[i]&255);
-              if(c=='\\n'){String message=line.toString();line.setLength(0);if(message.startsWith("{"))announce("Device: "+message);}
-              else if(c!='\\r' && line.length()<2048)line.append(c);
+              if(c=='\n'){String message=line.toString();line.setLength(0);if(message.startsWith("{"))announce("Device: "+message);}
+              else if(c!='\r' && line.length()<2048)line.append(c);
             }
           } catch(Exception e){break;}
         }
         handler.post(()->{if(active && port!=null)disconnect("USB connection lost");});
       },"mambo-usb-reader").start();
-      send("{\\"cmd\\":\\"status\\"}");
+      send("{\"cmd\":\"status\"}");
     } catch(Exception e){announce("USB connection failed: "+e.getMessage());}
   }
   private void send(String command) {
     UsbSerialPort current=port;
     if(current==null){announce("Connect USB first");return;}
-    new Thread(()->{try{current.write((command+"\\n").getBytes(StandardCharsets.UTF_8),1500);}catch(Exception e){announce("USB write failed");}},"mambo-usb-write").start();
+    new Thread(()->{try{current.write((command+"\n").getBytes(StandardCharsets.UTF_8),1500);}catch(Exception e){announce("USB write failed");}},"mambo-usb-write").start();
   }
   private synchronized void disconnect(String reason) {
     reading=false;
