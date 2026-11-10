@@ -12,7 +12,6 @@ import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.speech.tts.TextToSpeech;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
@@ -25,7 +24,6 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Locale;
 
 public class MainActivity extends Activity {
   private static final String DEVICE_URL="http://192.168.4.1/";
@@ -34,11 +32,17 @@ public class MainActivity extends Activity {
   private UsbManager manager;
   private UsbSerialPort port;
   private UsbSerialDriver pendingDriver;
-  private TextToSpeech voice;
   private TextView usbStatus;
   private WebView web;
   private volatile boolean reading=false;
   private boolean active=true;
+  private final Runnable reconnectCheck=new Runnable() {
+    @Override public void run() {
+      if(!active)return;
+      if(port==null)discover(false);
+      handler.postDelayed(this,2500);
+    }
+  };
   private final BroadcastReceiver receiver=new BroadcastReceiver() {
     @Override public void onReceive(Context context,Intent intent) {
       String action=intent.getAction();
@@ -50,20 +54,18 @@ public class MainActivity extends Activity {
         UsbDevice device=intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
         if(port!=null && port.getDriver().getDevice().equals(device)) disconnect("USB disconnected");
       } else if(UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
-        handler.postDelayed(()->discover(true),400);
+        handler.postDelayed(()->discover(false),400);
       }
     }
   };
   private void announce(String message) {
     runOnUiThread(()->{
       if(usbStatus!=null)usbStatus.setText(message);
-      if(voice!=null)voice.speak(message,TextToSpeech.QUEUE_FLUSH,null,"mambo-usb");
     });
   }
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     manager=(UsbManager)getSystemService(USB_SERVICE);
-    voice=new TextToSpeech(this,status->{if(status==TextToSpeech.SUCCESS)voice.setLanguage(Locale.UK);});
     IntentFilter filter=new IntentFilter();
     filter.addAction(USB_PERMISSION);filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
     registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED);
@@ -87,6 +89,7 @@ public class MainActivity extends Activity {
     wifi.setOnClickListener(v->web.loadUrl(DEVICE_URL));
     setContentView(layout);web.loadUrl(DEVICE_URL);
     discover(false);
+    handler.postDelayed(reconnectCheck,2500);
   }
   private void discover(boolean prompt) {
     if(!active || port!=null)return;
@@ -139,14 +142,14 @@ public class MainActivity extends Activity {
     UsbSerialPort old=port;port=null;
     if(old!=null)try{old.close();}catch(Exception ignored){}
     announce(reason);
-    if(active)handler.postDelayed(()->discover(false),1000);
+    // Periodic reconnectCheck handles later reattachment while app is active.
   }
   @Override protected void onDestroy() {
     active=false;reading=false;
+    handler.removeCallbacks(reconnectCheck);
     unregisterReceiver(receiver);
     disconnect("USB closed");
     if(web!=null)web.destroy();
-    if(voice!=null){voice.stop();voice.shutdown();}
     super.onDestroy();
   }
 }
