@@ -13,6 +13,8 @@
 #include "skb_ir_presets.h"
 #include "skb_ir_monitor_presets.h"
 
+#include "skb_badble.h"
+
 static WebServer server(80);
 static constexpr uint8_t IR_PIN = 19;
 static bool filesystemReady = false;
@@ -32,6 +34,7 @@ static unsigned long pathShieldEnabledSince = 0;
 
 
 void bleAdvertisementControl() {
+ if(server.method()==HTTP_POST) {server.send(409,"application/json",R"({"ok":false,"error":"BLE_HID_keyboard_owns_advertising","hint":"BLE HID pairing runs automatically"})");return;}
  if(server.method()==HTTP_POST) {
   JsonDocument request;
   if(deserializeJson(request,server.arg("plain")) || !request["enabled"].is<bool>()) {server.send(400,"application/json",R"({"ok":false,"error":"enabled_boolean_required"})");return;}
@@ -378,7 +381,7 @@ void setup() {
   M5.Display.println("  PRO");
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(apName);
-  BLEDevice::init("SKB-MULTITOOL-PRO");
+  skbBadBleInit();
   bleScanner = BLEDevice::getScan();
   bleScanner->setActiveScan(false);
   bleAdvertiser=BLEDevice::getAdvertising();
@@ -394,6 +397,8 @@ void setup() {
   server.on("/api/ble/scan", HTTP_GET, scanBle);
   server.on("/api/ble/advertise", HTTP_GET, bleAdvertisementControl);
   server.on("/api/ble/advertise", HTTP_POST, bleAdvertisementControl);
+  server.on("/api/badble", HTTP_GET, [](){JsonDocument r;skbBadBleStatus(r);String out;serializeJson(r,out);server.send(200,"application/json",out);});
+  server.on("/api/badble", HTTP_POST, [](){JsonDocument req,res;if(deserializeJson(req,server.arg("plain"))){server.send(400,"application/json",R"({"ok":false,"error":"invalid_json"})");return;}skbBadBleCommand(req,res);String out;serializeJson(res,out);server.send(res["ok"].as<bool>()?200:422,"application/json",out);});
   server.on("/api/ble/tracking", HTTP_GET, bleTrackingSettings);
   server.on("/api/ble/tracking", HTTP_POST, bleTrackingSettings);
   server.on("/api/pathshield", HTTP_GET, sendPathShieldStatus);
@@ -480,7 +485,26 @@ renderMonitorPower();bleAdvertiseStatus();refreshIRFiles();
 <div class="grid"><section class="panel"><div class="tag">WI-FI</div><h2>Network scan</h2><button onclick="scan()">Scan</button></section>
 <section class="panel"><div class="tag">BLUETOOTH</div><h2>BLE discovery</h2><p class="muted">BLE advertisement discovery</p><button onclick="scanBle()">Discover</button></section></div>
 <section id="bluetooth" class="panel"><div class="tag">BLUETOOTH RESULTS</div><pre id="ble-results">Tap Discover to scan BLE advertisements.</pre><h2>Track one of your devices</h2><input id="ble-target" placeholder="BLE address AA:BB:CC:DD:EE:FF" style="width:100%;padding:12px;background:#0b1723;color:#fff;border:1px solid #34bfff;border-radius:10px;margin:8px 0"><button onclick="saveBleTarget()">Save target</button> <button onclick="clearBleTarget()">Clear</button><pre id="ble-tracking">No target configured</pre></section>
-<section id="privacy" class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification and last-scan counts. These are not proof of unwanted tracking.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
+<section class="panel" id="badble"><div class="tag">BLE HID / MANUAL MACROS</div><h2>SKB BLE Keyboard</h2>
+<p class="muted">Pair once with your own phone or PC. The keyboard advertises and reconnects automatically when the host permits it. Text macros NEVER run on connection; select one and press RUN.</p>
+<button onclick="skbHidStatus()">CHECK PAIRING</button><pre id="skb-hid-status">Checking...</pre>
+<label>Saved macro <select id="skb-hid-select" style="width:100%;padding:11px;background:#171717;color:white"></select></label>
+<button onclick="skbHidLoad()">LOAD / REVIEW</button>
+<label>Macro name <input id="skb-hid-name" maxlength="20" placeholder="MyMacro"></label>
+<label>Macro text (printable characters only, max 160)<textarea id="skb-hid-text" maxlength="160" rows="4" style="width:100%;background:#131313;color:#fff"></textarea></label>
+<div class="grid"><button onclick="skbHidSave()">SAVE</button><button onclick="skbHidDelete()">DELETE</button><button onclick="skbHidRun()">RUN SELECTED</button><button onclick="skbHidStop()">STOP</button></div>
+<pre id="skb-hid-result">Only manually triggered text macros can transmit.</pre></section>
+<script>
+async function skbHid(action='status',fields={}){const r=await fetch('/api/badble',{method:action==='status'?'GET':'POST',headers:{'Content-Type':'application/json'},body:action==='status'?undefined:JSON.stringify({action,...fields})});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||r.status);return d}
+async function skbHidStatus(){try{const x=await skbHid();document.getElementById('skb-hid-status').textContent=x.connected?'Paired and connected; ready for selected macro':'Not connected. Pair SKB BLE Keyboard in the host Bluetooth settings first.';if(x.running)document.getElementById('skb-hid-status').textContent+=' Macro running: '+x.selected;}catch(e){document.getElementById('skb-hid-status').textContent=String(e)}}
+async function skbHidList(){try{const d=await skbHid('list');const sel=document.getElementById('skb-hid-select');sel.replaceChildren();for(const m of d.macros){const o=document.createElement('option');o.value=m.name;o.textContent=m.name;o.dataset.text=m.text;sel.append(o)} }catch(e){document.getElementById('skb-hid-result').textContent=String(e)}}
+function skbHidLoad(){const sel=document.getElementById('skb-hid-select'),o=sel.selectedOptions[0];if(!o)return;document.getElementById('skb-hid-name').value=o.value;document.getElementById('skb-hid-text').value=o.dataset.text||''}
+async function skbHidSave(){const name=document.getElementById('skb-hid-name').value,text=document.getElementById('skb-hid-text').value;try{const d=await skbHid('save',{name,text});document.getElementById('skb-hid-result').textContent='Saved '+d.name;await skbHidList()}catch(e){document.getElementById('skb-hid-result').textContent=String(e)}}
+async function skbHidDelete(){const name=document.getElementById('skb-hid-select').value;try{await skbHid('delete',{name});document.getElementById('skb-hid-result').textContent='Deleted '+name;await skbHidList()}catch(e){document.getElementById('skb-hid-result').textContent=String(e)}}
+async function skbHidRun(){const name=document.getElementById('skb-hid-select').value;const out=document.getElementById('skb-hid-result');if(!name){out.textContent='Select a saved macro first';return}try{await skbHid('run',{name});out.textContent='RUN selected: '+name;skbHidStatus()}catch(e){out.textContent=String(e)}}
+async function skbHidStop(){try{await skbHid('stop');document.getElementById('skb-hid-result').textContent='Stopped';skbHidStatus()}catch(e){document.getElementById('skb-hid-result').textContent=String(e)}}
+skbHidList();skbHidStatus();
+</script><section id="privacy" class="panel"><div class="tag">SETTINGS / PRIVACY</div><h2>PathShield</h2><p class="muted">BLE tracker-candidate classification and last-scan counts. These are not proof of unwanted tracking.</p><label><input type="checkbox" id="pathshield" onchange="setPathShield(this.checked)"> Enable PathShield mode</label><pre id="pathshield-state">Loading...</pre></section>
 <section class="panel"><div class="tag">SIGNAL FINDER</div><h2>Wi-Fi strength</h2><p class="muted">Signal levels from completed Wi-Fi scans; refresh by scanning again. Live tracking and BLE proximity alerts are not yet available.</p><button onclick="signalWifi()">View signal levels</button><pre id="signal-wifi">No readings yet</pre></section>
 <section id="wifi" class="panel"><h2>Nearby Wi-Fi</h2><pre id="networks">Tap Scan to discover networks.</pre></section>
 <p class="muted">Access point: SKB-MULTITOOL-PRO • http://192.168.4.1</p>
@@ -496,7 +520,7 @@ refresh();})();
 </script></main><script>
 (()=>{
 const host=document.querySelector('main');if(!host)return;
-const specs=[['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['settings','SETTINGS']];
+const specs=[['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['badble','BLE KEYBOARD'],['settings','SETTINGS']];
 const containers={};
 const deck=document.createElement('div');deck.className='skb-pages';deck.id='skb-pages';
 const tabs=document.createElement('nav');tabs.className='skb-tabs';tabs.setAttribute('aria-label','Dashboard pages');
@@ -518,6 +542,7 @@ if(['tv-power-panel','ir-presets','infrared'].includes(node.id))name='tv';
 else if(node.id==='monitor-power'||node.querySelector('#monitor-file'))name='monitors';
 else if(['ble-advertising','bluetooth'].includes(node.id))name='bluetooth';
 else if(node.id==='wifi'||node.querySelector('#signal-wifi'))name='wifi';
+else if(node.id==='badble')name='badble';
 else if(node.id==='privacy')name='settings';
 else if(node.matches('p')&&node.textContent.includes('Access point:'))name='wifi';
 containers[name].append(node)
@@ -565,6 +590,7 @@ fetch('/logo.png',{method:'HEAD'}).then(r=>{if(r.ok)document.getElementById('skb
 }
 
 void loop() {
+  skbBadBleTick();
   M5.update();
   server.handleClient();
   while (Serial.available()) {
