@@ -23,6 +23,14 @@ import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.ScrollView;
 import android.widget.FrameLayout;
+import android.widget.EditText;
+import android.view.View;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceError;
 import org.json.JSONObject;
@@ -43,6 +51,10 @@ public class MainActivity extends Activity {
   private TextView deviceResponse;
   private Spinner radioMode;
   private WebView web;
+  private LinearLayout appRoot, moduleBody;
+  private TextView pageTitle, connectionLabel;
+  private String currentPage="Home";
+  private static final String[] PAGES={"Home","Wi-Fi","Bluetooth","CC1101 RF","nRF24","Infrared","USB","Settings"};
   private volatile boolean reading=false;
   private volatile boolean active=true;
   private final Runnable reconnectCheck=new Runnable() {
@@ -69,7 +81,7 @@ public class MainActivity extends Activity {
   };
   private void announce(String message) {
     runOnUiThread(()->{
-      if(usbStatus!=null)usbStatus.setText(message);
+      if(connectionLabel!=null)connectionLabel.setText(message);
     });
   }
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -78,59 +90,113 @@ public class MainActivity extends Activity {
     IntentFilter filter=new IntentFilter();
     filter.addAction(USB_PERMISSION);filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
     registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED);
-    getWindow().setStatusBarColor(Color.rgb(12,15,23));
-    getWindow().setNavigationBarColor(Color.rgb(12,15,23));
-    LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setBackgroundColor(Color.rgb(12,15,23));
-    ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);
-    LinearLayout controls=new LinearLayout(this);controls.setOrientation(LinearLayout.VERTICAL);scroll.addView(controls);
-    layout.addView(scroll,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
-    TextView title=new TextView(this);title.setText("MAMBO OS V3  •  DEVICE CONTROL");title.setTextColor(Color.WHITE);title.setPadding(20,36,12,20);controls.addView(title);
-    usbStatus=new TextView(this);usbStatus.setTextColor(Color.WHITE);usbStatus.setPadding(16,12,16,12);usbStatus.setText("USB: disconnected");controls.addView(usbStatus);
-    Button usb=new Button(this);usb.setText("Connect USB / request permission");controls.addView(usb);
-    Button status=new Button(this);status.setText("USB device status");controls.addView(status);
-    Button radio=new Button(this);radio.setText("USB radio diagnostics");controls.addView(radio);
-    Button probe=new Button(this);probe.setText("Read-only SPI probe (USB)");controls.addView(probe);
-    Button nrf=new Button(this);nrf.setText("nRF24 channel activity (USB)");controls.addView(nrf);
-    Button cc=new Button(this);cc.setText("CC1101 RSSI (USB)");controls.addView(cc);
-    radioMode=new Spinner(this);
-    radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
-    controls.addView(radioMode);
-    Button selectRadio=new Button(this);selectRadio.setText("Set selected radio (USB)");controls.addView(selectRadio);
-    deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);
-    deviceResponse.setPadding(16,10,16,10);deviceResponse.setText("Connect USB to view device status");
-    deviceResponse.setTextIsSelectable(true);
-    controls.addView(deviceResponse);
-    Button wifi=new Button(this);wifi.setText("Open Wi-Fi dashboard (requires Mambo Wi-Fi)");controls.addView(wifi);
-    web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
-    web.setWebViewClient(new WebViewClient(){
-      @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-        if(request.isForMainFrame())announce("Dashboard unavailable. Connect phone Wi-Fi to Mambo OS AP, then tap Retry.");
-      }
-      @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
-        return !request.getUrl().toString().startsWith(DEVICE_URL);
-      }
+    getWindow().setStatusBarColor(Color.rgb(2,10,18));
+    getWindow().setNavigationBarColor(Color.rgb(2,10,18));
+    appRoot=new LinearLayout(this);appRoot.setOrientation(LinearLayout.VERTICAL);appRoot.setBackgroundColor(Color.rgb(2,10,18));
+    LinearLayout header=new LinearLayout(this);header.setGravity(android.view.Gravity.CENTER_VERTICAL);header.setPadding(12,24,12,12);
+    Button back=button("❮");header.addView(back);back.setOnClickListener(v->showPage("Home"));
+    pageTitle=new TextView(this);pageTitle.setTextColor(Color.WHITE);pageTitle.setTypeface(null,Typeface.BOLD);pageTitle.setTextSize(20);pageTitle.setGravity(android.view.Gravity.CENTER);
+    header.addView(pageTitle,new LinearLayout.LayoutParams(0,-2,1));
+    Button menu=button("☰");header.addView(menu);menu.setOnClickListener(v->showPage("Home"));
+    appRoot.addView(header);
+    connectionLabel=new TextView(this);connectionLabel.setTextColor(Color.rgb(75,238,246));connectionLabel.setPadding(20,6,12,12);connectionLabel.setText("USB: disconnected  •  Wi-Fi: not checked");
+    appRoot.addView(connectionLabel);
+    ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
+    moduleBody=new LinearLayout(this);moduleBody.setOrientation(LinearLayout.VERTICAL);moduleBody.setPadding(16,8,16,20);
+    scroll.addView(moduleBody);appRoot.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    LinearLayout pager=new LinearLayout(this);pager.setGravity(android.view.Gravity.CENTER);
+    Button prev=button("❮ PREV"),next=button("NEXT ❯");
+    pager.addView(prev,new LinearLayout.LayoutParams(0,-2,1));pager.addView(next,new LinearLayout.LayoutParams(0,-2,1));appRoot.addView(pager);
+    prev.setOnClickListener(v->stepPage(-1));next.setOnClickListener(v->stepPage(1));
+    final float[] down={0,0};
+    scroll.setOnTouchListener((v,e)->{
+      if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){down[0]=e.getX();down[1]=e.getY();}
+      if(e.getAction()==android.view.MotionEvent.ACTION_UP){
+        float dx=e.getX()-down[0],dy=e.getY()-down[1];
+        if(Math.abs(dx)>120&&Math.abs(dx)>Math.abs(dy)*1.7f){stepPage(dx<0?1:-1);return true;}
+      }return false;
     });
-    web.setVisibility(android.view.View.GONE);
-    controls.addView(web,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,520));
-    usb.setOnClickListener(v->discover(true));
-    status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
-    radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
-    probe.setOnClickListener(v->send("{\"cmd\":\"radio_probe\"}"));
-    nrf.setOnClickListener(v->send("{\"cmd\":\"radio_observe\",\"start_channel\":0,\"count\":8}"));
-    cc.setOnClickListener(v->send("{\"cmd\":\"cc1101_rssi\"}"));
-    selectRadio.setOnClickListener(v->{
-      try {JSONObject cmd=new JSONObject();cmd.put("cmd","radio_select");cmd.put("mode",radioMode.getSelectedItem().toString());send(cmd.toString());}
-      catch(Exception e){announce("Invalid radio selection");}
-    });
-    wifi.setOnClickListener(v->{
-      web.setVisibility(android.view.View.VISIBLE);
-      web.loadUrl(DEVICE_URL);
-      wifi.setText("Retry Wi-Fi dashboard");
-    });
-    setContentView(layout);
+    setContentView(appRoot);showPage("Home");
     discover(false);
     handler.postDelayed(reconnectCheck,2500);
   }
+
+  private Button button(String label){
+    Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextColor(Color.WHITE);
+    GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xff064354,0xff07121c});
+    bg.setCornerRadius(28);bg.setStroke(2,0xff2adcf0);b.setBackground(bg);
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(5,7,5,7);b.setLayoutParams(p);return b;
+  }
+  private void addAction(String label,Runnable action){Button b=button(label);moduleBody.addView(b);b.setOnClickListener(v->action.run());}
+  private void note(String label){TextView t=new TextView(this);t.setText(label);t.setTextColor(0xffb6dce5);t.setTextSize(15);t.setPadding(10,12,10,12);moduleBody.addView(t);}
+  private void stepPage(int delta){int i=java.util.Arrays.asList(PAGES).indexOf(currentPage);showPage(PAGES[Math.max(0,Math.min(PAGES.length-1,i+delta))]);}
+  private void showPage(String page){
+    currentPage=page;pageTitle.setText("MAMBO OS • "+page);moduleBody.removeAllViews();
+    switch(page){
+      case "Home":
+        note("MAMBO OS V3\nM5StickC Plus2 • Select a module");
+        for(String p:PAGES)if(!p.equals("Home"))addAction(p,()->showPage(p));
+        addAction("Refresh device status",()->send("{\\"cmd\\":\\"status\\"}"));break;
+      case "Wi-Fi":
+        note("Wi-Fi tools require your phone connected to the Mambo OS access point.");
+        addAction("Check Wi-Fi connection",()->request("/api/status","GET",null));
+        addAction("Scan networks",()->request("/api/wifi/scan","POST","{}"));
+        addAction("View scan results",()->request("/api/wifi/results","GET",null));
+        addAction("Signal monitor",()->request("/api/signal/wifi","GET",null));
+        addAction("Open full web dashboard",()->openDashboard());break;
+      case "Bluetooth":
+        addAction("Scan BLE devices",()->request("/api/ble/scan","GET",null));
+        addAction("BLE advertising status",()->request("/api/ble/advertise","GET",null));
+        addAction("Start BLE advertising",()->request("/api/ble/advertise","POST","{\\"enabled\\":true}"));
+        addAction("Stop BLE advertising",()->request("/api/ble/advertise","POST","{\\"enabled\\":false}"));
+        addAction("BLE tracking settings",()->request("/api/ble/tracking","GET",null));break;
+      case "CC1101 RF":
+        addAction("Select CC1101 (USB)",()->send("{\\"cmd\\":\\"radio_select\\",\\"mode\\":\\"cc1101\\"}"));
+        addAction("Radio diagnostics (USB)",()->send("{\\"cmd\\":\\"radio_status\\"}"));
+        addAction("SPI probe (USB)",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
+        addAction("Read CC1101 RSSI (USB)",()->send("{\\"cmd\\":\\"cc1101_rssi\\"}"));
+        addAction("Radio Lab (Wi-Fi)",()->openDashboard());break;
+      case "nRF24":
+        addAction("Select nRF24 (USB)",()->send("{\\"cmd\\":\\"radio_select\\",\\"mode\\":\\"nrf24\\"}"));
+        addAction("SPI probe (USB)",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
+        addAction("Sample channels (USB)",()->send("{\\"cmd\\":\\"radio_observe\\",\\"start_channel\\":0,\\"count\\":8}"));
+        addAction("Radio Lab (Wi-Fi)",()->openDashboard());break;
+      case "Infrared":
+        addAction("Saved remote library",()->request("/api/ir/library","GET",null));
+        addAction("Samsung TV power",()->request("/api/ir/tv-power","POST","{\\"brand\\":\\"Samsung\\",\\"confirm\\":true}"));
+        addAction("LG TV power",()->request("/api/ir/tv-power","POST","{\\"brand\\":\\"LG\\",\\"confirm\\":true}"));
+        addAction("Full IR remote controls",()->openDashboard());break;
+      case "USB":
+        addAction("Connect USB / grant permission",()->discover(true));
+        addAction("Device status",()->send("{\\"cmd\\":\\"status\\"}"));
+        addAction("Radio diagnostics",()->send("{\\"cmd\\":\\"radio_status\\"}"));
+        addAction("SPI probe",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
+        addAction("Disconnect USB",()->disconnect("USB disconnected by user"));break;
+      case "Settings":
+        addAction("Firmware information",()->request("/api/status","GET",null));
+        addAction("Radio settings",()->request("/api/mambo/radio","GET",null));
+        addAction("Branding & storage (Wi-Fi)",()->openDashboard());break;
+    }
+    deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);deviceResponse.setTextSize(14);deviceResponse.setPadding(12,20,12,12);deviceResponse.setText("Results appear here");deviceResponse.setTextIsSelectable(true);moduleBody.addView(deviceResponse);
+  }
+  private void openDashboard(){
+    if(web==null){web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);}
+    moduleBody.removeAllViews();note("Connect your phone Wi-Fi to Mambo OS before using the dashboard.");
+    moduleBody.addView(web,new LinearLayout.LayoutParams(-1,1000));web.loadUrl(DEVICE_URL);
+  }
+  private void request(String endpoint,String method,String body){
+    if(deviceResponse!=null)deviceResponse.setText("Connecting to Mambo OS Wi-Fi...");
+    new Thread(()->{HttpURLConnection c=null;try{
+      c=(HttpURLConnection)new URL("http://192.168.4.1"+endpoint).openConnection();c.setConnectTimeout(3500);c.setReadTimeout(4500);c.setRequestMethod(method);
+      if(body!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));}
+      InputStream in=(c.getResponseCode()<400?c.getInputStream():c.getErrorStream());
+      ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[1024];int n;while((n=in.read(buf))!=-1&&out.size()<20000)out.write(buf,0,n);
+      String result=out.toString("UTF-8");runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText(result);connectionLabel.setText("Wi-Fi: connected • USB: "+(port==null?"disconnected":"connected"));});
+    }catch(Exception e){runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText("Wi-Fi unavailable. Connect phone to the Mambo OS access point.\n"+e.getMessage());});}
+    finally{if(c!=null)c.disconnect();}
+    },"mambo-http").start();
+  }
+
   private void discover(boolean prompt) {
     if(!active || port!=null)return;
     List<UsbSerialDriver> drivers=UsbSerialProber.getDefaultProber().findAllDrivers(manager);
