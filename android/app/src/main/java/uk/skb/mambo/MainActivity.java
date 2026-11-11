@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
       case "Home":
         note("MAMBO OS V3\nM5StickC Plus2 • Select a module");
         for(String p:PAGES)if(!p.equals("Home"))addAction(p,()->showPage(p));
-        addAction("Refresh device status",()->send("{\\"cmd\\":\\"status\\"}"));break;
+        addAction("Refresh device status",()->send("{\"cmd\":\"status\"}"));break;
       case "Wi-Fi":
         note("Wi-Fi tools require your phone connected to the Mambo OS access point.");
         addAction("Check Wi-Fi connection",()->request("/api/status","GET",null));
@@ -147,30 +147,30 @@ public class MainActivity extends Activity {
       case "Bluetooth":
         addAction("Scan BLE devices",()->request("/api/ble/scan","GET",null));
         addAction("BLE advertising status",()->request("/api/ble/advertise","GET",null));
-        addAction("Start BLE advertising",()->request("/api/ble/advertise","POST","{\\"enabled\\":true}"));
-        addAction("Stop BLE advertising",()->request("/api/ble/advertise","POST","{\\"enabled\\":false}"));
+        addAction("Start BLE advertising",()->request("/api/ble/advertise","POST","{\"enabled\":true}"));
+        addAction("Stop BLE advertising",()->request("/api/ble/advertise","POST","{\"enabled\":false}"));
         addAction("BLE tracking settings",()->request("/api/ble/tracking","GET",null));break;
       case "CC1101 RF":
-        addAction("Select CC1101 (USB)",()->send("{\\"cmd\\":\\"radio_select\\",\\"mode\\":\\"cc1101\\"}"));
-        addAction("Radio diagnostics (USB)",()->send("{\\"cmd\\":\\"radio_status\\"}"));
-        addAction("SPI probe (USB)",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
-        addAction("Read CC1101 RSSI (USB)",()->send("{\\"cmd\\":\\"cc1101_rssi\\"}"));
+        addAction("Select CC1101 (USB)",()->send("{\"cmd\":\"radio_select\",\"mode\":\"cc1101\"}"));
+        addAction("Radio diagnostics (USB)",()->send("{\"cmd\":\"radio_status\"}"));
+        addAction("SPI probe (USB)",()->send("{\"cmd\":\"radio_probe\"}"));
+        addAction("Read CC1101 RSSI (USB)",()->send("{\"cmd\":\"cc1101_rssi\"}"));
         addAction("Radio Lab (Wi-Fi)",()->openDashboard());break;
       case "nRF24":
-        addAction("Select nRF24 (USB)",()->send("{\\"cmd\\":\\"radio_select\\",\\"mode\\":\\"nrf24\\"}"));
-        addAction("SPI probe (USB)",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
-        addAction("Sample channels (USB)",()->send("{\\"cmd\\":\\"radio_observe\\",\\"start_channel\\":0,\\"count\\":8}"));
+        addAction("Select nRF24 (USB)",()->send("{\"cmd\":\"radio_select\",\"mode\":\"nrf24\"}"));
+        addAction("SPI probe (USB)",()->send("{\"cmd\":\"radio_probe\"}"));
+        addAction("Sample channels (USB)",()->send("{\"cmd\":\"radio_observe\",\"start_channel\":0,\"count\":8}"));
         addAction("Radio Lab (Wi-Fi)",()->openDashboard());break;
       case "Infrared":
         addAction("Saved remote library",()->request("/api/ir/library","GET",null));
-        addAction("Samsung TV power",()->request("/api/ir/tv-power","POST","{\\"brand\\":\\"Samsung\\",\\"confirm\\":true}"));
-        addAction("LG TV power",()->request("/api/ir/tv-power","POST","{\\"brand\\":\\"LG\\",\\"confirm\\":true}"));
+        addAction("Samsung TV power",()->request("/api/ir/tv-power","POST","{\"brand\":\"Samsung\",\"confirm\":true}"));
+        addAction("LG TV power",()->request("/api/ir/tv-power","POST","{\"brand\":\"LG\",\"confirm\":true}"));
         addAction("Full IR remote controls",()->openDashboard());break;
       case "USB":
         addAction("Connect USB / grant permission",()->discover(true));
-        addAction("Device status",()->send("{\\"cmd\\":\\"status\\"}"));
-        addAction("Radio diagnostics",()->send("{\\"cmd\\":\\"radio_status\\"}"));
-        addAction("SPI probe",()->send("{\\"cmd\\":\\"radio_probe\\"}"));
+        addAction("Device status",()->send("{\"cmd\":\"status\"}"));
+        addAction("Radio diagnostics",()->send("{\"cmd\":\"radio_status\"}"));
+        addAction("SPI probe",()->send("{\"cmd\":\"radio_probe\"}"));
         addAction("Disconnect USB",()->disconnect("USB disconnected by user"));break;
       case "Settings":
         addAction("Firmware information",()->request("/api/status","GET",null));
