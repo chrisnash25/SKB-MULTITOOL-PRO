@@ -21,6 +21,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
+import android.widget.ScrollView;
+import android.widget.FrameLayout;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceError;
 import org.json.JSONObject;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -74,31 +78,40 @@ public class MainActivity extends Activity {
     IntentFilter filter=new IntentFilter();
     filter.addAction(USB_PERMISSION);filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
     registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED);
+    getWindow().setStatusBarColor(Color.rgb(12,15,23));
+    getWindow().setNavigationBarColor(Color.rgb(12,15,23));
     LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setBackgroundColor(Color.rgb(12,15,23));
-    TextView title=new TextView(this);title.setText("MAMBO OS V3 | Wi-Fi + USB");title.setTextColor(Color.WHITE);title.setPadding(20,20,12,20);layout.addView(title);
-    usbStatus=new TextView(this);usbStatus.setTextColor(Color.WHITE);usbStatus.setPadding(16,12,16,12);usbStatus.setText("USB not connected");layout.addView(usbStatus);
-    Button usb=new Button(this);usb.setText("Connect USB / request permission");layout.addView(usb);
-    Button status=new Button(this);status.setText("USB device status");layout.addView(status);
-    Button radio=new Button(this);radio.setText("USB radio diagnostics");layout.addView(radio);
-    Button probe=new Button(this);probe.setText("Read-only SPI probe (USB)");layout.addView(probe);
-    Button nrf=new Button(this);nrf.setText("nRF24 channel activity (USB)");layout.addView(nrf);
-    Button cc=new Button(this);cc.setText("CC1101 RSSI (USB)");layout.addView(cc);
+    ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);
+    LinearLayout controls=new LinearLayout(this);controls.setOrientation(LinearLayout.VERTICAL);scroll.addView(controls);
+    layout.addView(scroll,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+    TextView title=new TextView(this);title.setText("MAMBO OS V3  •  DEVICE CONTROL");title.setTextColor(Color.WHITE);title.setPadding(20,36,12,20);controls.addView(title);
+    usbStatus=new TextView(this);usbStatus.setTextColor(Color.WHITE);usbStatus.setPadding(16,12,16,12);usbStatus.setText("USB: disconnected");controls.addView(usbStatus);
+    Button usb=new Button(this);usb.setText("Connect USB / request permission");controls.addView(usb);
+    Button status=new Button(this);status.setText("USB device status");controls.addView(status);
+    Button radio=new Button(this);radio.setText("USB radio diagnostics");controls.addView(radio);
+    Button probe=new Button(this);probe.setText("Read-only SPI probe (USB)");controls.addView(probe);
+    Button nrf=new Button(this);nrf.setText("nRF24 channel activity (USB)");controls.addView(nrf);
+    Button cc=new Button(this);cc.setText("CC1101 RSSI (USB)");controls.addView(cc);
     radioMode=new Spinner(this);
     radioMode.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"none","cc1101","nrf24"}));
-    layout.addView(radioMode);
-    Button selectRadio=new Button(this);selectRadio.setText("Set selected radio (USB)");layout.addView(selectRadio);
+    controls.addView(radioMode);
+    Button selectRadio=new Button(this);selectRadio.setText("Set selected radio (USB)");controls.addView(selectRadio);
     deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);
-    deviceResponse.setPadding(16,10,16,10);deviceResponse.setText("No USB response yet");
+    deviceResponse.setPadding(16,10,16,10);deviceResponse.setText("Connect USB to view device status");
     deviceResponse.setTextIsSelectable(true);
-    layout.addView(deviceResponse);
-    Button wifi=new Button(this);wifi.setText("Open Wi-Fi dashboard");layout.addView(wifi);
+    controls.addView(deviceResponse);
+    Button wifi=new Button(this);wifi.setText("Open Wi-Fi dashboard (requires Mambo Wi-Fi)");controls.addView(wifi);
     web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
     web.setWebViewClient(new WebViewClient(){
+      @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+        if(request.isForMainFrame())announce("Dashboard unavailable. Connect phone Wi-Fi to Mambo OS AP, then tap Retry.");
+      }
       @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
         return !request.getUrl().toString().startsWith(DEVICE_URL);
       }
     });
-    layout.addView(web,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+    web.setVisibility(android.view.View.GONE);
+    controls.addView(web,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,520));
     usb.setOnClickListener(v->discover(true));
     status.setOnClickListener(v->send("{\"cmd\":\"status\"}"));
     radio.setOnClickListener(v->send("{\"cmd\":\"radio_status\"}"));
@@ -109,8 +122,12 @@ public class MainActivity extends Activity {
       try {JSONObject cmd=new JSONObject();cmd.put("cmd","radio_select");cmd.put("mode",radioMode.getSelectedItem().toString());send(cmd.toString());}
       catch(Exception e){announce("Invalid radio selection");}
     });
-    wifi.setOnClickListener(v->web.loadUrl(DEVICE_URL));
-    setContentView(layout);web.loadUrl(DEVICE_URL);
+    wifi.setOnClickListener(v->{
+      web.setVisibility(android.view.View.VISIBLE);
+      web.loadUrl(DEVICE_URL);
+      wifi.setText("Retry Wi-Fi dashboard");
+    });
+    setContentView(layout);
     discover(false);
     handler.postDelayed(reconnectCheck,2500);
   }
@@ -165,9 +182,19 @@ public class MainActivity extends Activity {
             if(mode.equals(radioMode.getItemAtPosition(i)))radioMode.setSelection(i);
         });
       }
-      final String display=reply.toString(2);
+      final String display=formatReply(reply);
       runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText(display);});
     } catch(Exception ignored) { announce("Unrecognised USB response"); }
+  }
+  private String formatReply(JSONObject r) {
+    if(r.optBoolean("ok",true)==false)return "Action unavailable: "+r.optString("error","Unknown error")+"\nRadio: "+r.optString("mode",r.optString("selected_mode","none"));
+    String mode=r.optString("selected_mode",r.optString("mode",""));
+    StringBuilder out=new StringBuilder("Device response");
+    if(!mode.isEmpty())out.append("\nRadio: ").append(mode);
+    if(r.has("rssi"))out.append("\nRSSI: ").append(r.opt("rssi"));
+    if(r.has("transmission_enabled"))out.append("\nTransmission: ").append(r.optBoolean("transmission_enabled")?"enabled":"disabled");
+    if(out.toString().equals("Device response"))return r.toString();
+    return out.toString();
   }
   private void send(String command) {
     UsbSerialPort current=port;
