@@ -13,6 +13,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.os.Build;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -96,6 +98,15 @@ public class MainActivity extends Activity {
     getWindow().setStatusBarColor(Color.rgb(2,10,18));
     getWindow().setNavigationBarColor(Color.rgb(2,10,18));
     appRoot=new LinearLayout(this);appRoot.setOrientation(LinearLayout.VERTICAL);appRoot.setBackgroundColor(Color.rgb(2,10,18));
+    // Android 15 edge-to-edge: keep the pager clear of gesture/3-button navigation.
+    final int baseBottom=dp(8);
+    appRoot.setOnApplyWindowInsetsListener((view,insets)->{
+      int bottom;
+      if(Build.VERSION.SDK_INT>=30) bottom=insets.getInsets(WindowInsets.Type.navigationBars() | WindowInsets.Type.displayCutout()).bottom;
+      else bottom=insets.getSystemWindowInsetBottom();
+      view.setPadding(0,0,0,Math.max(baseBottom,bottom+dp(8)));
+      return insets;
+    });
     LinearLayout header=new LinearLayout(this);header.setGravity(android.view.Gravity.CENTER_VERTICAL);header.setPadding(12,24,12,12);
     Button back=button("❮");header.addView(back,new LinearLayout.LayoutParams(56,-2));back.setOnClickListener(v->showPage("Home"));
     pageTitle=new TextView(this);pageTitle.setTextColor(Color.WHITE);pageTitle.setTypeface(null,Typeface.BOLD);pageTitle.setTextSize(20);pageTitle.setGravity(android.view.Gravity.CENTER);
@@ -108,6 +119,7 @@ public class MainActivity extends Activity {
     moduleBody=new LinearLayout(this);moduleBody.setOrientation(LinearLayout.VERTICAL);moduleBody.setPadding(16,8,16,20);
     scroll.addView(moduleBody);appRoot.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     LinearLayout pager=new LinearLayout(this);pager.setGravity(android.view.Gravity.CENTER);
+    pager.setMinimumHeight(dp(64));
     Button prev=button("❮ PREV"),next=button("NEXT ❯");
     pager.addView(prev,new LinearLayout.LayoutParams(0,-2,1));pager.addView(next,new LinearLayout.LayoutParams(0,-2,1));appRoot.addView(pager);
     prev.setOnClickListener(v->stepPage(-1));next.setOnClickListener(v->stepPage(1));
@@ -119,11 +131,12 @@ public class MainActivity extends Activity {
         if(Math.abs(dx)>120&&Math.abs(dx)>Math.abs(dy)*1.7f){stepPage(dx<0?1:-1);return true;}
       }return false;
     });
-    setContentView(appRoot);showPage("Home");
+    setContentView(appRoot);appRoot.requestApplyInsets();showPage("Home");
     discover(false);
     handler.postDelayed(reconnectCheck,2500);
   }
 
+  private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
   private Button button(String label){
     Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextColor(Color.WHITE);
     GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xff064354,0xff07121c});
