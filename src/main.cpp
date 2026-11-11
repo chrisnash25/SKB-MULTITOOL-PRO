@@ -679,7 +679,7 @@ refresh();})();
 </script></main><script>
 (()=>{
 const host=document.querySelector('main');if(!host)return;
-const specs=[['radio','RADIO LAB'],['home','HOME'],['tv','TV REMOTES'],['monitors','MONITORS'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['badble','BLE KEYBOARD'],['settings','SETTINGS']];
+const specs=[['home','HOME'],['wifi','WI-FI'],['bluetooth','BLUETOOTH'],['radio','RADIO LAB'],['tv','INFRARED'],['monitors','MONITORS'],['badble','BLE KEYBOARD'],['settings','SETTINGS']];
 const containers={};
 const deck=document.createElement('div');deck.className='skb-pages';deck.id='skb-pages';
 const tabs=document.createElement('nav');tabs.className='skb-tabs';tabs.setAttribute('aria-label','Dashboard pages');
@@ -687,6 +687,29 @@ const footer=document.createElement('div');footer.className='skb-pager';
 for(const [id,title] of specs){const pg=document.createElement('section');pg.className='skb-page';pg.id='skb-page-'+id;pg.setAttribute('aria-label',title);
 const head=document.createElement('div');head.className='skb-page-title';const strong=document.createElement('strong');strong.textContent=title;const hint=document.createElement('span');hint.textContent='SWIPE LEFT / RIGHT';head.append(strong,hint);pg.append(head);containers[id]=pg;deck.append(pg);
 const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.dataset.page=id;tab.setAttribute('aria-controls',pg.id);tab.addEventListener('click',()=>show(id));tabs.append(tab)}
+
+const mamboLanding=document.createElement('section');
+mamboLanding.id='mambo-landing';
+mamboLanding.innerHTML=`<div class="mambo-topbar"><button type="button" id="mambo-menu" aria-label="Open module menu">☰</button><span class="mambo-topactions"><button type="button" id="mambo-refresh" aria-label="Refresh status">⟳</button><button type="button" id="mambo-wifi-shortcut" aria-label="Wi-Fi tools">◉</button></span></div>
+<div class="mambo-hero"><div class="mambo-skb"><img src="/mambo-brand/skb" alt="SKB Made by Chris Nash" onerror="this.style.display='none'"><strong>SKB</strong><small>MADE BY<br>CHRIS NASH</small></div><div class="mambo-wordmark"><span class="mambo-crown">♛</span><strong>MAMBO OS</strong><small>M5StickC Plus2</small></div><img class="mambo-cat" src="/mambo-brand/portrait" alt="Mambo cat" onerror="this.style.display='none'"></div>
+<div class="mambo-connection"><span id="mambo-live-connection">● Connecting…</span><span id="mambo-live-battery">Battery —</span><span>◉ Wi-Fi AP</span></div>
+<div class="mambo-grid">
+<button data-mambo-page="home">⌂<span>Home</span></button><button data-mambo-page="wifi">◉<span>Wi-Fi</span></button>
+<button data-mambo-page="bluetooth">ᛒ<span>Bluetooth / BLE</span></button><button data-mambo-page="radio" data-mambo-radio="cc1101">⌁<span>CC1101 RF</span></button>
+<button data-mambo-page="radio" data-mambo-radio="nrf24">▂▅▇<span>nRF24</span></button><button data-mambo-page="tv">◉<span>Infrared</span></button>
+<button data-mambo-page="usb">⌯<span>USB Tools</span></button><button data-mambo-page="settings">⚙<span>Settings</span></button>
+</div><div class="mambo-home-pager"><button id="mambo-left" aria-label="Previous module">❮</button><span>● ○ ○ ○ ○</span><button id="mambo-right" aria-label="Next module">❯</button></div>`;
+const mamboStyle=document.createElement('style');
+mamboStyle.textContent=`#mambo-landing{background:#020a11;color:white;padding:12px 16px 24px;border-radius:14px;font-family:system-ui,sans-serif}#mambo-landing button{cursor:pointer;color:#fff}.mambo-topbar{display:flex;justify-content:space-between}.mambo-topactions{display:flex;gap:10px}.mambo-topbar button,.mambo-home-pager button{background:linear-gradient(#102c36,#030d13);border:1px solid #78eaff;border-radius:13px;box-shadow:inset 0 0 12px #08647a;padding:10px 17px;font-size:27px}.mambo-hero{display:flex;align-items:center;justify-content:space-between;min-height:155px;gap:7px}.mambo-skb{width:28%;text-align:center;display:flex;flex-direction:column;align-items:center}.mambo-skb img{max-width:100%;max-height:100px;object-fit:contain}.mambo-skb strong{font:900 clamp(26px,8vw,70px) Georgia,serif;color:#d5e5ed;text-shadow:0 2px 4px #fff6}.mambo-skb small{font-size:9px;letter-spacing:1px}.mambo-wordmark{display:flex;flex:1;flex-direction:column;align-items:center;white-space:nowrap;text-align:center}.mambo-wordmark strong{font-size:clamp(20px,5vw,42px);text-shadow:0 0 18px #00d9ef}.mambo-wordmark small{font-size:clamp(11px,2.6vw,20px)}.mambo-crown{font-size:55px;color:#e8f7ff;text-shadow:0 0 18px #00dfff}.mambo-cat{width:27%;max-height:180px;object-fit:contain}.mambo-connection{display:flex;justify-content:space-around;gap:5px;align-items:center;border:1px solid #49efff;border-radius:14px;padding:14px 5px;margin:8px 0 18px;box-shadow:0 0 12px #00dfffa8;font-size:clamp(10px,2.8vw,17px)}#mambo-live-connection{color:#3fff7a}.mambo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.mambo-grid button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:114px;padding:12px 4px;background:linear-gradient(150deg,#034456,#020a10 55%);border:2px solid #43f2ff;border-radius:20px;box-shadow:0 0 12px #00d9f3,inset 0 0 14px #006e87;font-size:clamp(30px,7vw,55px)}.mambo-grid button span{font-size:clamp(13px,3.5vw,22px);font-weight:700}.mambo-grid button:active{background:#08677c}.mambo-home-pager{display:flex;justify-content:space-between;align-items:center;margin-top:24px;color:#06e9ff}.mambo-home-pager button{min-width:75px}#mambo-landing .mambo-menu-list{display:flex;flex-wrap:wrap;gap:6px;padding:8px}.mambo-menu-list button{background:#12303d;border:1px solid #35dfff;border-radius:8px;padding:8px}`;
+document.head.append(mamboStyle);
+containers.home.prepend(mamboLanding);
+mamboLanding.querySelectorAll('[data-mambo-page]').forEach(b=>b.addEventListener('click',()=>{const page=b.dataset.mamboPage;if(page==='usb'){alert('USB serial controls are available in the Android companion app. Browser USB access is not supported on this device.');return;}show(page);if(b.dataset.mamboRadio){const sel=document.querySelector('[data-radio-mode],#radio-mode');if(sel){sel.value=b.dataset.mamboRadio;sel.dispatchEvent(new Event('change'));}}}));
+mamboLanding.querySelector('#mambo-refresh').addEventListener('click',async()=>{try{const r=await fetch('/api/status');if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();mamboLanding.querySelector('#mambo-live-connection').textContent='● Connected';const bat=d.battery_percent??d.battery??d.batteryPercent;mamboLanding.querySelector('#mambo-live-battery').textContent=typeof bat==='number'?'Battery '+Math.round(bat)+'%':'Battery unavailable';}catch(e){mamboLanding.querySelector('#mambo-live-connection').textContent='● Offline';}});
+mamboLanding.querySelector('#mambo-wifi-shortcut').addEventListener('click',()=>show('wifi'));
+mamboLanding.querySelector('#mambo-left').addEventListener('click',()=>show(Math.max(0,current-1)));
+mamboLanding.querySelector('#mambo-right').addEventListener('click',()=>show(Math.min(specs.length-1,current+1)));
+mamboLanding.querySelector('#mambo-menu').addEventListener('click',()=>{const list=mamboLanding.querySelector('.mambo-menu-list');if(list){list.remove();return;}const el=document.createElement('div');el.className='mambo-menu-list';for(const [id,label] of specs){const b=document.createElement('button');b.textContent=label;b.addEventListener('click',()=>{el.remove();show(id)});el.append(b)}mamboLanding.querySelector('.mambo-topbar').after(el)});
+setTimeout(()=>mamboLanding.querySelector('#mambo-refresh').click(),500);
 
 const brandPanel=document.createElement('article');
 brandPanel.className='mambo-brand-control';
