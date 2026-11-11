@@ -24,6 +24,10 @@ import android.widget.ArrayAdapter;
 import android.widget.ScrollView;
 import android.widget.FrameLayout;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.graphics.BitmapFactory;
+import android.graphics.Bitmap;
+import android.widget.FrameLayout;
 import android.view.View;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -129,14 +133,47 @@ public class MainActivity extends Activity {
   private void addAction(String label,Runnable action){Button b=button(label);moduleBody.addView(b);b.setOnClickListener(v->action.run());}
   private void note(String label){TextView t=new TextView(this);t.setText(label);t.setTextColor(0xffb6dce5);t.setTextSize(15);t.setPadding(10,12,10,12);moduleBody.addView(t);}
   private void stepPage(int delta){int i=java.util.Arrays.asList(PAGES).indexOf(currentPage);showPage(PAGES[Math.max(0,Math.min(PAGES.length-1,i+delta))]);}
+
+  private ImageView artwork(String name){
+    ImageView image=new ImageView(this);
+    try(InputStream in=getAssets().open("branding/"+name)){Bitmap bitmap=BitmapFactory.decodeStream(in);image.setImageBitmap(bitmap);}
+    catch(Exception e){image.setContentDescription("Missing branding image: "+name);}
+    image.setScaleType(ImageView.ScaleType.FIT_CENTER);return image;
+  }
+  private void homeHotspot(FrameLayout layer,String page,int x,int y,int w,int h,int width,int height){
+    View tap=new View(this);tap.setContentDescription(page);tap.setClickable(true);
+    FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(Math.round(w*width/1024f),Math.round(h*height/1536f));
+    lp.leftMargin=Math.round(x*width/1024f);lp.topMargin=Math.round(y*height/1536f);
+    layer.addView(tap,lp);tap.setOnClickListener(v->showPage(page));
+  }
+  private void showArtworkHome(){
+    int width=getResources().getDisplayMetrics().widthPixels-Math.round(32*getResources().getDisplayMetrics().density);
+    int height=Math.round(width*1.5f);
+    FrameLayout layer=new FrameLayout(this);
+    ImageView background=artwork("mambo_home.png");background.setScaleType(ImageView.ScaleType.FIT_XY);
+    layer.addView(background,new FrameLayout.LayoutParams(-1,-1));
+    String[] destinations={"Home","Wi-Fi","Bluetooth","CC1101 RF","nRF24","Infrared","USB","Settings"};
+    int[] xs={44,522,44,522,44,522,44,522};
+    int[] ys={522,522,734,734,939,939,1132,1132};
+    for(int i=0;i<destinations.length;i++)homeHotspot(layer,destinations[i],xs[i],ys[i],457,190,width,height);
+    homeHotspot(layer,"Settings",18,18,82,70,width,height);
+    homeHotspot(layer,"Wi-Fi",935,18,72,70,width,height);
+    homeHotspot(layer,"USB",44,1370,190,90,width,height);
+    homeHotspot(layer,"Wi-Fi",789,1370,190,90,width,height);
+    layer.setLayoutParams(new LinearLayout.LayoutParams(-1,height));
+    moduleBody.addView(layer);
+    note("Live connection status appears above. The battery and connection labels inside the artwork are illustrative.");
+  }
   private void showPage(String page){
     currentPage=page;pageTitle.setText("MAMBO OS • "+page);moduleBody.removeAllViews();
     if(web!=null && web.getParent()!=null)((ViewGroup)web.getParent()).removeView(web);
+    if(!page.equals("Home")){
+      ImageView brand=artwork("mambo_cat.png");moduleBody.addView(brand,new LinearLayout.LayoutParams(-1,150));
+      ImageView skb=artwork("skb_artwork.png");moduleBody.addView(skb,new LinearLayout.LayoutParams(-1,90));
+    }
     switch(page){
       case "Home":
-        note("MAMBO OS V3\nM5StickC Plus2 • Select a module");
-        for(String p:PAGES)if(!p.equals("Home"))addAction(p,()->showPage(p));
-        addAction("Refresh device status",()->send("{\"cmd\":\"status\"}"));break;
+        showArtworkHome();break;
       case "Wi-Fi":
         note("Wi-Fi tools require your phone connected to the Mambo OS access point.");
         addAction("Check Wi-Fi connection",()->request("/api/status","GET",null));
@@ -177,6 +214,7 @@ public class MainActivity extends Activity {
         addAction("Radio settings",()->request("/api/mambo/radio","GET",null));
         addAction("Branding & storage (Wi-Fi)",()->openDashboard());break;
     }
+    if(page.equals("Home"))return;
     deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);deviceResponse.setTextSize(14);deviceResponse.setPadding(12,20,12,12);deviceResponse.setText("Results appear here");deviceResponse.setTextIsSelectable(true);moduleBody.addView(deviceResponse);
   }
   private void openDashboard(){
