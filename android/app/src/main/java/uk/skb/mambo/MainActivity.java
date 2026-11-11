@@ -31,7 +31,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
-import android.webkit.WebViewClient;
 import android.webkit.WebResourceError;
 import org.json.JSONObject;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
@@ -94,10 +93,10 @@ public class MainActivity extends Activity {
     getWindow().setNavigationBarColor(Color.rgb(2,10,18));
     appRoot=new LinearLayout(this);appRoot.setOrientation(LinearLayout.VERTICAL);appRoot.setBackgroundColor(Color.rgb(2,10,18));
     LinearLayout header=new LinearLayout(this);header.setGravity(android.view.Gravity.CENTER_VERTICAL);header.setPadding(12,24,12,12);
-    Button back=button("❮");header.addView(back);back.setOnClickListener(v->showPage("Home"));
+    Button back=button("❮");header.addView(back,new LinearLayout.LayoutParams(56,-2));back.setOnClickListener(v->showPage("Home"));
     pageTitle=new TextView(this);pageTitle.setTextColor(Color.WHITE);pageTitle.setTypeface(null,Typeface.BOLD);pageTitle.setTextSize(20);pageTitle.setGravity(android.view.Gravity.CENTER);
     header.addView(pageTitle,new LinearLayout.LayoutParams(0,-2,1));
-    Button menu=button("☰");header.addView(menu);menu.setOnClickListener(v->showPage("Home"));
+    Button menu=button("☰");header.addView(menu,new LinearLayout.LayoutParams(56,-2));menu.setOnClickListener(v->showPage("Home"));
     appRoot.addView(header);
     connectionLabel=new TextView(this);connectionLabel.setTextColor(Color.rgb(75,238,246));connectionLabel.setPadding(20,6,12,12);connectionLabel.setText("USB: disconnected  •  Wi-Fi: not checked");
     appRoot.addView(connectionLabel);
@@ -132,6 +131,7 @@ public class MainActivity extends Activity {
   private void stepPage(int delta){int i=java.util.Arrays.asList(PAGES).indexOf(currentPage);showPage(PAGES[Math.max(0,Math.min(PAGES.length-1,i+delta))]);}
   private void showPage(String page){
     currentPage=page;pageTitle.setText("MAMBO OS • "+page);moduleBody.removeAllViews();
+    if(web!=null && web.getParent()!=null)((ViewGroup)web.getParent()).removeView(web);
     switch(page){
       case "Home":
         note("MAMBO OS V3\nM5StickC Plus2 • Select a module");
@@ -185,14 +185,15 @@ public class MainActivity extends Activity {
     moduleBody.addView(web,new LinearLayout.LayoutParams(-1,1000));web.loadUrl(DEVICE_URL);
   }
   private void request(String endpoint,String method,String body){
-    if(deviceResponse!=null)deviceResponse.setText("Connecting to Mambo OS Wi-Fi...");
+    final TextView output=deviceResponse;
+    if(output!=null)output.setText("Connecting to Mambo OS Wi-Fi...");
     new Thread(()->{HttpURLConnection c=null;try{
       c=(HttpURLConnection)new URL("http://192.168.4.1"+endpoint).openConnection();c.setConnectTimeout(3500);c.setReadTimeout(4500);c.setRequestMethod(method);
       if(body!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));}
       InputStream in=(c.getResponseCode()<400?c.getInputStream():c.getErrorStream());
       ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[1024];int n;while((n=in.read(buf))!=-1&&out.size()<20000)out.write(buf,0,n);
-      String result=out.toString("UTF-8");runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText(result);connectionLabel.setText("Wi-Fi: connected • USB: "+(port==null?"disconnected":"connected"));});
-    }catch(Exception e){runOnUiThread(()->{if(deviceResponse!=null)deviceResponse.setText("Wi-Fi unavailable. Connect phone to the Mambo OS access point.\n"+e.getMessage());});}
+      String result=out.toString("UTF-8");runOnUiThread(()->{if(output!=null)output.setText(result);connectionLabel.setText("Wi-Fi: connected • USB: "+(port==null?"disconnected":"connected"));});
+    }catch(Exception e){runOnUiThread(()->{if(output!=null)output.setText("Wi-Fi unavailable. Connect phone to the Mambo OS access point.\n"+e.getMessage());});}
     finally{if(c!=null)c.disconnect();}
     },"mambo-http").start();
   }
@@ -264,7 +265,7 @@ public class MainActivity extends Activity {
   }
   private void send(String command) {
     UsbSerialPort current=port;
-    if(current==null){announce("Connect USB first");return;}
+    if(current==null){announce("Connect USB first");if(deviceResponse!=null)deviceResponse.setText("USB not connected. Open USB Tools and tap Connect USB.");return;}
     new Thread(()->{try{current.write((command+"\n").getBytes(StandardCharsets.UTF_8),1500);}catch(Exception e){announce("USB write failed");}},"mambo-usb-write").start();
   }
   private synchronized void disconnect(String reason) {
@@ -279,7 +280,7 @@ public class MainActivity extends Activity {
     handler.removeCallbacks(reconnectCheck);
     unregisterReceiver(receiver);
     disconnect("USB closed");
-    if(web!=null)web.destroy();
+    if(web!=null){if(web.getParent()!=null)((ViewGroup)web.getParent()).removeView(web);web.destroy();}
     super.onDestroy();
   }
 }
