@@ -193,7 +193,16 @@ public class MainActivity extends Activity {
         addAction("Scan networks",()->request("/api/wifi/scan","POST","{}"));
         addAction("View scan results",()->request("/api/wifi/results","GET",null));
         addAction("Signal monitor",()->request("/api/signal/wifi","GET",null));
-        addAction("Open full web dashboard",()->openDashboard());break;
+        addAction("Open full web dashboard",()->openDashboard());
+        addAction("Wi-Fi Deauth • Controls",()->showPage("Wi-Fi Deauth"));
+        addAction("Evil Portal • Controls",()->showPage("Evil Portal"));
+        addAction("Beacon Flood • Controls",()->showPage("Beacon Flood"));break;
+      case "Wi-Fi Deauth":
+        showUnwiredPanel("Wi-Fi Deauth",true);break;
+      case "Evil Portal":
+        showUnwiredPanel("Evil Portal",false);break;
+      case "Beacon Flood":
+        showUnwiredPanel("Beacon Flood",false);break;
       case "Bluetooth":
         addAction("Scan BLE devices",()->request("/api/ble/scan","GET",null));
         addAction("BLE advertising status",()->request("/api/ble/advertise","GET",null));
@@ -229,6 +238,32 @@ public class MainActivity extends Activity {
     }
     if(page.equals("Home"))return;
     deviceResponse=new TextView(this);deviceResponse.setTextColor(Color.WHITE);deviceResponse.setTextSize(14);deviceResponse.setPadding(12,20,12,12);deviceResponse.setText("Results appear here");deviceResponse.setTextIsSelectable(true);moduleBody.addView(deviceResponse);
+  }
+  // UI-only placeholders. No RF transmission, credential capture, or device commands.
+  private void showUnwiredPanel(String title,boolean includeTarget){
+    note(title+" • Interface only. Firmware integration is not installed.");
+    if(includeTarget){
+      EditText target=new EditText(this);target.setSingleLine(true);
+      target.setHint("Target identifier (not connected)");target.setTextColor(Color.WHITE);
+      target.setHintTextColor(0xff92b2bd);moduleBody.addView(target);
+    }
+    if(title.equals("Beacon Flood")){
+      EditText names=new EditText(this);names.setHint("SSID names (one per line)");
+      names.setMinLines(3);names.setTextColor(Color.WHITE);names.setHintTextColor(0xff92b2bd);
+      moduleBody.addView(names);
+    }
+    if(title.equals("Evil Portal")){
+      EditText portalName=new EditText(this);portalName.setSingleLine(true);
+      portalName.setHint("Portal display name");portalName.setTextColor(Color.WHITE);
+      portalName.setHintTextColor(0xff92b2bd);moduleBody.addView(portalName);
+    }
+    addAction("START",()->unwiredNotice(title));
+    addAction("STOP",()->unwiredNotice(title));
+    addAction("STATUS",()->unwiredNotice(title));
+    addAction("Back to Wi-Fi",()->showPage("Wi-Fi"));
+  }
+  private void unwiredNotice(String title){
+    if(deviceResponse!=null)deviceResponse.setText(title+": controls are not connected to firmware. No action was transmitted.");
   }
   private void openDashboard(){
     if(web==null){web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);}
