@@ -65,3 +65,6 @@ The UI reports received PCM blocks, HTTP stream errors, estimated capture throug
 - Browser recording in Original mode stores unprocessed PCM. Processed WAV export applies the low-cut and EQ but currently **does not include** the adaptive gate or automatic gain changes used during live playback.
 - The persistent stream and new audio conditioning have not been verified on hardware; build success alone does not prove real-time playback quality.
 - The original SKB image asset was not yet embedded; the UI still displays CSS lettering. An exact original image must be recovered and converted to a firmware-friendly embedded asset before claiming this is done.
+
+## Logo build verification
+The exact uploaded JPEG at `assets/SKB_Audio_Logo.jpg` is embedded at build time. The build must pass before flashing; the UI falls back to text only if the asset is missing.
