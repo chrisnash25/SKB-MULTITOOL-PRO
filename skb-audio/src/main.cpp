@@ -341,7 +341,7 @@ void setup(){
  WiFi.mode(WIFI_AP);
  WiFi.softAP(AP_NAME,AP_PASSWORD);
  web.on("/",HTTP_GET,[]{web.send_P(200,"text/html",PAGE);});
- web.on("/logo-status",HTTP_GET,[]{web.send(200,"application/json",SKB_LOGO_LENGTH>0?"{\\"available\\":true}":"{\\"available\\":false}");});
+ web.on("/logo-status",HTTP_GET,[]{web.send(200,"application/json",SKB_LOGO_LENGTH>0?"{\"available\":true}":"{\"available\":false}");});
  web.on("/skb-logo.jpg",HTTP_GET,[]{
   if(!SKB_LOGO_LENGTH){web.send(404,"text/plain","logo not embedded");return;}
   web.setContentLength(SKB_LOGO_LENGTH);
