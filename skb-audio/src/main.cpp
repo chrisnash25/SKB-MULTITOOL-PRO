@@ -30,7 +30,7 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 <div class="row"><button id="listen">▶ LIVE LISTEN</button><button id="mute" disabled>MUTE</button><button id="record" disabled>● RECORD</button><button id="stop" disabled>■ STOP & SAVE</button></div>
 <label>Playback volume <output id="volLabel">80%</output></label><input id="volume" type="range" min="0" max="100" value="80">
 <label>Input gain (digital) <output id="gainLabel">1.0×</output></label><input id="gain" type="range" min="1" max="6" step=".1" value="1">
-<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Processed playback</option></select></label></div>
+<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Digital-gain adjusted (not full EQ)</option></select></label></div>
 </div>
 <div class="panel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
 <div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select a frequency for Band A or B.</small></div>
@@ -182,7 +182,7 @@ static void handleChunk(){
  if(capturing){web.send(503,"text/plain","busy");return;}
  capturing=true;
  M5.Speaker.end();
- if(!M5.Mic.isRunning() && !M5.Mic.begin()){
+ if(!M5.Mic.begin()){
   capturing=false;web.send(500,"text/plain","mic init failed");return;
  }
  bool ok=M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE);
