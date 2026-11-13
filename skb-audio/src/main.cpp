@@ -28,26 +28,52 @@ canvas{display:block;width:100%;height:140px;background:#0b0d0e;border:1px solid
 label{display:block;margin:9px 0 3px}input[type=range]{width:100%;accent-color:#c2c6ca}
 small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{background:#222;color:white;padding:8px;border:1px solid #777;border-radius:6px}
 #status{font-size:13px;min-height:20px}.pill{padding:4px 9px;border:1px solid #777;border-radius:20px;font-size:12px}
+
+/* SKB brushed-metal dashboard, mobile-first */
+body{background:repeating-linear-gradient(0deg,#1c1e20,#292c2f 2px,#202225 5px);color:#e1e2e4;padding:10px}
+main{max-width:800px}.logo{font-size:clamp(88px,24vw,190px);line-height:1.03;letter-spacing:-.105em;margin:10px 0 0;padding-right:.12em;color:#34373a;-webkit-text-stroke:1px #858a8f;text-shadow:0 1px 0 #e1e4e7,1px 3px 0 #070809,0 8px 12px #08090a;font-weight:1000}
+.sub{font-size:clamp(10px,2.5vw,22px);font-weight:900;letter-spacing:.05em;color:#aeb2b6;text-shadow:0 2px #000}
+.plate{background:linear-gradient(155deg,#56595d 0%,#292b2e 45%,#111214 100%);border:2px solid #969b9e;border-radius:9px;box-shadow:inset 0 2px #c5c9cb,0 4px 6px #090a0b;font-size:clamp(14px,4vw,25px);letter-spacing:2px;margin:17px 8px;padding:13px}
+.panel{background:linear-gradient(155deg,#343639,#1b1d20 60%,#0d0e10);border:2px solid #6c7074;border-radius:16px;padding:16px;margin:13px 0;box-shadow:inset 0 2px #a5aaae,0 4px 10px #0b0c0d}
+button{background:linear-gradient(#505357 0%,#2c2e31 48%,#121416 100%);border:2px solid #74797d;box-shadow:inset 0 2px #a4a9ad,0 5px 7px #0a0b0c;border-radius:12px;min-height:65px;font-weight:850;letter-spacing:.02em}
+button.active{background:linear-gradient(#6a6f74,#303438)}
+canvas{height:170px;background:#050607;border:2px solid #777;border-radius:12px;box-shadow:inset 0 0 12px #000}
+#heroControls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:13px 0}
+#heroControls button{min-width:0;padding:8px 3px;font-size:clamp(10px,2.5vw,15px)}
+#heroControls #listen:before{content:'◉';display:block;font-size:26px;margin-bottom:5px}
+#heroControls #record:before{content:'●';display:block;font-size:27px;margin-bottom:5px}
+#heroControls #stop:before{content:'■';display:block;font-size:26px;margin-bottom:5px}
+#heroControls #save:before{content:'↓';display:block;font-size:27px;margin-bottom:5px}
+#dashboardStatus{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;font-size:clamp(10px,2.5vw,15px);text-align:center}
+#dashboardStatus .pill{border-radius:6px;padding:10px 2px;background:linear-gradient(#242628,#0e0f10);overflow-wrap:anywhere}
+#recordIndicator{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:#090a0b;border:1px solid #777;border-radius:15px;margin:12px 0;font-weight:800;letter-spacing:.08em}
+#recordIndicator.recording{color:#eee}#recordIndicator.recording:before{content:'●';color:#e5e5e5;margin-right:8px}
+#micMeter{display:flex;align-items:center;gap:8px;margin:12px 0;font-weight:700}
+#meterTrack{flex:1;background:#090a0b;border:1px solid #777;border-radius:5px;height:18px;overflow:hidden}
+#meterFill{height:100%;width:0;background:repeating-linear-gradient(90deg,#b5b8bc 0,#b5b8bc 8px,#333 9px,#333 12px);transition:width .09s}
+#navLinks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+#navLinks button{font-size:clamp(10px,2.4vw,14px);padding:5px}
+#qualityLabel{font-size:13px;color:#b7bcc0;text-align:right}
 </style></head><body><main>
-<div class="logo">SKB</div><div class="sub">SECURE HARDWARE SOLUTIONS</div><div class="plate">AUDIO LAB · LIVE LISTEN / RECORD / SPECTRUM</div>
-<div class="panel"><div class="row"><span class="pill" id="connection">DISCONNECTED</span><span class="pill" id="clock">00:00</span><span class="pill" id="battery">BATTERY —</span></div>
+<div class="logo">SKB</div><div class="sub">SECURE HARDWARE SOLUTIONS</div><div class="plate">SKB AUDIO RECORDER</div>
+<div class="panel"><div id="dashboardStatus" class="row"><span class="pill" id="connection">DISCONNECTED</span><span class="pill" id="clock">00:00</span><span class="pill" id="battery">BATTERY —</span></div>
 <p id="status">Tap LIVE LISTEN to activate microphone streaming. Use with permission.</p>
-<div class="row"><button id="listen">▶ LIVE LISTEN</button><button id="mute" disabled>MUTE</button><button id="record" disabled>● RECORD</button><button id="stop" disabled>■ STOP & SAVE</button></div>
-<label>Playback volume <output id="volLabel">80%</output></label><input id="volume" type="range" min="0" max="100" value="80">
+<div id="heroControls"><button id="listen">LISTEN</button><button id="record" disabled>RECORD</button><button id="stop" disabled>STOP</button><button id="save" disabled>SAVE WAV</button></div><div id="recordIndicator"><span id="recordText">READY</span><span id="recordTime">00:00</span></div><button id="mute" disabled>MUTE</button>
+<div id="micMeter"><span>MIC LEVEL</span><div id="meterTrack"><div id="meterFill"></div></div><span id="meterDb">−∞ dB</span></div><label>Playback volume <output id="volLabel">80%</output></label><input id="volume" type="range" min="0" max="100" value="80">
 <label>Input gain (digital) <output id="gainLabel">1.0×</output></label><input id="gain" type="range" min="1" max="6" step=".1" value="1">
 <div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label><input type="checkbox" id="gate"> Adaptive noise gate</label><label><input type="checkbox" id="agc"> Automatic gain control</label></div><div class="row"><label>Gate sensitivity <input id="gateLevel" type="range" min="1" max="8" step="1" value="3"></label><label>AGC target <input id="agcTarget" type="range" min="5" max="35" value="18"></label></div><div class="row"><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Full EQ processed</option></select></label></div>
 </div>
-<div class="panel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
-<div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select the nearest detected peak for Band A or B.</small></div>
-<div class="panel"><h3>SKB AUTOTUNE · TWO INDEPENDENT BANDS</h3>
+<div class="panel" id="wavePanel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
+<div class="panel" id="spectrumPanel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select the nearest detected peak for Band A or B.</small></div>
+<div class="panel" id="autotunePanel"><h3>SKB AUTOTUNE · TWO INDEPENDENT BANDS</h3>
 <div class="row"><button id="pickA" class="active">SELECT BAND A</button><button id="pickB">SELECT BAND B</button></div>
 <div id="bands"></div><div class="row"><button id="auto">AUTO TUNE SELECTED</button><button id="track">AUTO TRACK: OFF</button><button id="bypass">EQ BYPASS: OFF</button></div>
 <small>AutoTune centres a peaking EQ filter on the selected frequency. Auto Track follows the strongest detected peak; this can jump between sounds.</small>
 </div>
-<div class="panel"><h3>10-BAND GRAPHIC EQUALIZER</h3><div class="row"><button id="flat">FLAT</button><button id="voice">VOICE CLARITY</button><button id="hum">RUMBLE REDUCTION</button></div><div id="eq"></div></div>
+<div class="panel" id="eqPanel"><h3>10-BAND GRAPHIC EQUALIZER</h3><div class="row"><button id="flat">FLAT</button><button id="voice">VOICE CLARITY</button><button id="hum">RUMBLE REDUCTION</button></div><div id="eq"></div></div>
 <div class="panel"><h3>STREAM DIAGNOSTICS</h3><p id="diagnostics">No stream started</p><button id="testWav">DOWNLOAD 2-SECOND TEST TONE WAV</button><small>The test tone is generated on your phone and checks WAV export, not the M5 microphone.</small></div>
-<div class="panel"><h3>STATUS</h3><p id="info">Wi-Fi AP: SKB-Audio · 192.168.4.1</p><button id="reboot">REBOOT DEVICE</button><small>Audio is sent only while Listen is active. WAV files are saved to the phone, not device flash. Maximum recording: 3 minutes.</small></div>
-</main><script>
+<div class="panel" id="statusPanel"><h3>STATUS</h3><p id="info">Wi-Fi AP: SKB-Audio · 192.168.4.1</p><button id="reboot">REBOOT DEVICE</button><small>Audio is sent only while Listen is active. WAV files are saved to the phone, not device flash. Maximum recording: 3 minutes.</small></div>
+<div id="navLinks"><button onclick="document.getElementById('wavePanel').scrollIntoView()">WAVEFORM</button><button onclick="document.getElementById('spectrumPanel').scrollIntoView()">SPECTRUM</button><button onclick="document.getElementById('autotunePanel').scrollIntoView()">AUTOTUNE</button><button onclick="document.getElementById('statusPanel').scrollIntoView()">STATUS</button></div><p id="qualityLabel">WAV · 16 kHz / 16-bit mono · actual capture format</p></main><script>
 'use strict';
 const RATE=16000,N=512,$=id=>document.getElementById(id);
 let ctx=null,analyser=null,sourceGain=null,volumeNode=null,highpass=null,eqNodes=[],bandNodes=[],outputNode=null;
@@ -112,6 +138,9 @@ function condition(samples){
  return out;
 }
 function drawWave(samples){
+ let energy=0;for(const v of samples)energy+=v*v;
+ const rms=Math.sqrt(energy/samples.length),db=rms>0?20*Math.log10(rms):-96;
+ $('meterFill').style.width=clamp((db+60)/60*100,0,100)+'%';$('meterDb').textContent=Math.round(db)+' dB';
  const c=$('wave'),g=c.getContext('2d');g.fillStyle='#0b0d0e';g.fillRect(0,0,c.width,c.height);g.strokeStyle='#d5d9dc';g.beginPath();
  for(let i=0;i<samples.length;i++){const x=i/(samples.length-1)*c.width,y=c.height/2-samples[i]*c.height*.44;i?g.lineTo(x,y):g.moveTo(x,y)}g.stroke();
 }
@@ -158,7 +187,7 @@ async function renderProcessed(chunks){
  return [result.getChannelData(0).slice()];
 }
 async function stopRecord(){
- if(!recording)return;recording=false;$('record').disabled=false;$('stop').disabled=true;
+ if(!recording)return;recording=false;$('record').disabled=false;$('stop').disabled=true;$('save').disabled=true;$('recordText').textContent='READY';$('recordIndicator').classList.remove('recording');
  const chunks=recordOriginal;recordOriginal=[];
  if(!chunks.length){status('No audio captured');return}
  try{
@@ -229,8 +258,9 @@ async function stopListen(){
 }
 $('listen').onclick=()=>listening?stopListen():startListen();
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'UNMUTE':'MUTE';updateFilters()};
-$('record').onclick=()=>{recordOriginal=[];recordStart=Date.now();recording=true;$('record').disabled=true;$('stop').disabled=false;status('RECORDING — visible recording active')};
+$('record').onclick=()=>{recordOriginal=[];recordStart=Date.now();recording=true;$('record').disabled=true;$('stop').disabled=false;$('save').disabled=false;$('recordText').textContent='RECORDING';$('recordIndicator').classList.add('recording');status('RECORDING — visible recording active')};
 $('stop').onclick=stopRecord;
+$('save').onclick=stopRecord;
 $('volume').oninput=()=>{$('volLabel').textContent=$('volume').value+'%';if(ctx)updateFilters()};
 $('gain').oninput=()=>{$('gainLabel').textContent=Number($('gain').value).toFixed(1)+'×';if(ctx)updateFilters()};
 $('noise').onchange=updateFilters;
@@ -261,7 +291,7 @@ $('voice').onclick=()=>preset([-6,-4,-2,0,2,4,3,1,-1,-3]);
 $('hum').onclick=()=>{$('noise').checked=true;preset([-12,-8,-4,-2,0,0,0,0,0,0])};
 $('reboot').onclick=async()=>{if(confirm('Reboot the M5StickC Plus2?')){await stopListen();fetch('/reboot',{method:'POST'}).catch(()=>{});status('Reboot requested')}};
 setInterval(()=>{
- $('clock').textContent=recording?new Date(Date.now()-recordStart).toISOString().slice(14,19):'00:00';
+ $('clock').textContent=recording?new Date(Date.now()-recordStart).toISOString().slice(14,19):'00:00';$('recordTime').textContent=$('clock').textContent;
  if(listening){const seconds=Math.max(1,(Date.now()-streamStart)/1000);
  $('diagnostics').textContent='Audio blocks: '+blocks+' · errors: '+dropouts+' · capture throughput: '+(blocks*N/seconds/RATE*100).toFixed(0)+'% of real time · recorded: '+Math.round(recordOriginal.length*N/RATE)+'s'}
 },500);
