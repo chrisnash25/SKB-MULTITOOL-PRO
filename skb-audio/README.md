@@ -29,3 +29,30 @@ The workflow builds with PlatformIO and uploads firmware artifacts if compilatio
 - Recordings and listening should be initiated with everyone involved aware of and consenting to capture.
 
 Do not flash until the new workflow build passes and device compatibility has been reviewed.
+
+## Pre-release phone + hardware test checklist
+
+1. Build the latest branch and verify the workflow succeeds. Do not flash only because an earlier revision passed.
+2. Back up your current firmware before flashing. Verify board, flash size and firmware artifact/offsets.
+3. Boot the M5StickC Plus2 and connect Samsung S21 to Wi-Fi `SKB-Audio` (password `SKBAudio2026!`); stay connected even if Android says no Internet.
+4. Open `http://192.168.4.1` in Chrome. Confirm SKB branding, battery, and stream diagnostics.
+5. Press **DOWNLOAD 2-SECOND TEST TONE WAV**; confirm a playable 440 Hz tone. This tests browser download only.
+6. Tap **LIVE LISTEN**. Check sound through the phone, waveform movement, peak frequency and diagnostic errors. Avoid acoustic feedback by keeping phone output away from the M5 microphone.
+7. Tap distinct spectrum peaks, select Band A and Band B, press AutoTune, and verify that each band's frequency and boost/cut changes the heard sound.
+8. Test 10-band EQ presets, bypass, gain, low-cut and volume. Compare original and filtered sound.
+9. Record 10 seconds in Original mode, stop/save and play the downloaded WAV. Repeat in Full EQ processed mode and compare.
+10. Test Mute, Stop Listen, restart listening, reconnect Wi-Fi, and device reboot.
+11. Test a longer recording only after short recordings work. Maximum duration is 180 seconds.
+12. Record any problems with the firmware commit, Android Chrome version, and stream diagnostics.
+
+## Diagnostics
+The UI reports received PCM blocks, HTTP stream errors, estimated capture throughput and recorded seconds. It also includes a phone-generated 440 Hz WAV download self-test.
+
+## Known issues to assess
+- HTTP chunk polling is not a true persistent low-latency audio transport. Under some conditions it may stutter or lag.
+- Microphone sample capture and browser audio output have not yet been verified together on physical M5StickC Plus2 hardware.
+- Audio filters and FFT are processed in the phone browser, not in ESP32 firmware.
+- The browser records audio in memory until download; do not close Chrome during recording.
+- The original uploaded SKB logo is not embedded; the UI currently renders SKB as styled text.
+- Auto Track can follow unwanted noise, especially with low input levels.
+- No automatic gain control, advanced noise suppression or adjustable sample rate is implemented.
