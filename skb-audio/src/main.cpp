@@ -378,11 +378,11 @@ void setup(){
  web.on("/chunk",HTTP_GET,handleChunk);
  web.on("/mic-diagnostic",HTTP_GET,[]{
   bool ready=ensureMic();
-  String json=String("{\\\"mic_initialized\\\":")+(ready?"true":"false")
-    +",\\\"mic_enabled\\\":"+(M5.Mic.isEnabled()?"true":"false")
-    +",\\\"attempts\\\":"+String(micInitAttempts)
-    +",\\\"board\\\":"+String((int)M5.getBoard())
-    +",\\\"clock_pin\\\":0,\\\"data_pin\\\":34}";
+  String json=String("{\"mic_initialized\":")+(ready?"true":"false")
+    +",\"mic_enabled\":"+(M5.Mic.isEnabled()?"true":"false")
+    +",\"attempts\":"+String(micInitAttempts)
+    +",\"board\":"+String((int)M5.getBoard())
+    +",\"clock_pin\":0,\"data_pin\":34}";
   web.send(200,"application/json",json);
  });
  web.on("/status",HTTP_GET,handleStatus);
