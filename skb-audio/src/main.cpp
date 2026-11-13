@@ -7,6 +7,10 @@ static constexpr uint32_t SAMPLE_RATE = 16000;
 static constexpr size_t BLOCK_SAMPLES = 512;
 static int16_t pcm[BLOCK_SAMPLES];
 static WebServer web(80);
+static WiFiServer audioServer(81);
+static WiFiClient audioClient;
+static uint32_t lastAudioBlock=0;
+static constexpr uint32_t AUDIO_INTERVAL_MS=32;
 static bool capturing = false;
 static bool micReady = false;
 static const char *AP_NAME = "SKB-Audio";
@@ -31,7 +35,7 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 <div class="row"><button id="listen">▶ LIVE LISTEN</button><button id="mute" disabled>MUTE</button><button id="record" disabled>● RECORD</button><button id="stop" disabled>■ STOP & SAVE</button></div>
 <label>Playback volume <output id="volLabel">80%</output></label><input id="volume" type="range" min="0" max="100" value="80">
 <label>Input gain (digital) <output id="gainLabel">1.0×</output></label><input id="gain" type="range" min="1" max="6" step=".1" value="1">
-<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Full EQ processed</option></select></label></div>
+<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label><input type="checkbox" id="gate"> Adaptive noise gate</label><label><input type="checkbox" id="agc"> Automatic gain control</label></div><div class="row"><label>Gate sensitivity <input id="gateLevel" type="range" min="1" max="8" step="1" value="3"></label><label>AGC target <input id="agcTarget" type="range" min="5" max="35" value="18"></label></div><div class="row"><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Full EQ processed</option></select></label></div>
 </div>
 <div class="panel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
 <div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select the nearest detected peak for Band A or B.</small></div>
@@ -48,7 +52,7 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 const RATE=16000,N=512,$=id=>document.getElementById(id);
 let ctx=null,analyser=null,sourceGain=null,volumeNode=null,highpass=null,eqNodes=[],bandNodes=[],outputNode=null;
 let listening=false,muted=false,recording=false,recordStart=0,recordOriginal=[],nextTime=0,abort=null;
-let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0,lastTrack=0,blocks=0,dropouts=0,streamStart=0;
+let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0,lastTrack=0,blocks=0,dropouts=0,streamStart=0,noiseFloor=.004,agcGain=1,gateGain=1;
 const MAX_RECORD_SECONDS=180;
 const freqs=[80,160,315,630,1000,2000,3150,4000,6300,7900];
 const bands=[{hz:1200,gain:6,width:400,enabled:false},{hz:2400,gain:6,width:500,enabled:false}];
@@ -93,6 +97,19 @@ function initAudio(){
  let chain=[sourceGain,analyser,highpass,...eqNodes,...bandNodes,volumeNode];
  for(let i=0;i<chain.length-1;i++)chain[i].connect(chain[i+1]);
  volumeNode.connect(ctx.destination);outputNode=sourceGain;updateFilters();
+}
+function condition(samples){
+ let energy=0;for(let i=0;i<samples.length;i++)energy+=samples[i]*samples[i];
+ const rms=Math.sqrt(energy/samples.length);
+ if(rms<noiseFloor*2)noiseFloor=.99*noiseFloor+.01*rms;
+ const gateThreshold=Math.max(.002,noiseFloor*Number($('gateLevel').value)*1.5);
+ const desiredGate=$('gate').checked&&rms<gateThreshold?.06:1;
+ gateGain=gateGain*.85+desiredGate*.15;
+ const desiredAgc=$('agc').checked?clamp((Number($('agcTarget').value)/100)/Math.max(.01,rms),.5,8):1;
+ agcGain=agcGain*.96+desiredAgc*.04;
+ const out=new Float32Array(samples.length);
+ for(let i=0;i<out.length;i++)out[i]=clamp(samples[i]*gateGain*agcGain,-1,1);
+ return out;
 }
 function drawWave(samples){
  const c=$('wave'),g=c.getContext('2d');g.fillStyle='#0b0d0e';g.fillRect(0,0,c.width,c.height);g.strokeStyle='#d5d9dc';g.beginPath();
@@ -151,6 +168,38 @@ async function stopRecord(){
 }
 async function pump(){
  while(listening){
+  let reader=null;
+  try{
+   abort=new AbortController();
+   const r=await fetch('http://'+location.hostname+':81/live',{cache:'no-store',signal:abort.signal});
+   if(!r.ok||!r.body)throw Error('Audio connection failed: '+r.status);
+   reader=r.body.getReader();let pending=new Uint8Array(0);
+   while(listening){
+    const {value,done}=await reader.read();if(done)throw Error('Audio stream ended');
+    const combined=new Uint8Array(pending.length+value.length);combined.set(pending);combined.set(value,pending.length);
+    let offset=0;
+    while(combined.length-offset>=N*2){
+     const raw=combined.subarray(offset,offset+N*2);offset+=N*2;
+     const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),samples=new Float32Array(N);
+     for(let i=0;i<N;i++)samples[i]=view.getInt16(i*2,true)/32768;
+     drawWave(samples);
+     const clean=condition(samples);
+     const buffer=ctx.createBuffer(1,N,RATE);buffer.copyToChannel(clean,0);
+     const src=ctx.createBufferSource();src.buffer=buffer;src.connect(sourceGain);
+     nextTime=Math.max(nextTime,ctx.currentTime+.05);
+     if(nextTime-ctx.currentTime>.45)nextTime=ctx.currentTime+.05;
+     src.start(nextTime);nextTime+=N/RATE;
+     blocks++;if(recording){recordOriginal.push(samples.slice());if((Date.now()-recordStart)/1000>=MAX_RECORD_SECONDS){stopRecord();status('Recording limit reached — WAV saved')}}
+    }
+    pending=combined.slice(offset);
+    failures=0;
+   }
+  }catch(e){if(!listening)break;failures++;dropouts++;status('Stream error: '+e.message);if(failures>5){await stopListen();break}await new Promise(r=>setTimeout(r,250))}
+  finally{if(reader)try{await reader.cancel()}catch(e){}}
+ }
+}
+async function oldPumpUnused(){
+ while(listening){
   try{
    abort=new AbortController();
    const r=await fetch('/chunk',{cache:'no-store',signal:abort.signal});if(!r.ok)throw Error('HTTP '+r.status);
@@ -170,7 +219,7 @@ async function pump(){
 }
 async function startListen(){
  if(listening)return;
- try{initAudio();await ctx.resume();listening=true;blocks=0;dropouts=0;streamStart=Date.now();nextTime=ctx.currentTime+.08;status('LIVE — microphone streaming to phone');$('listen').textContent='■ END LISTEN';$('listen').classList.add('active');$('record').disabled=false;$('mute').disabled=false;$('connection').textContent='LIVE CONNECTED';drawSpectrum();pump()}
+ try{initAudio();await ctx.resume();listening=true;noiseFloor=.004;agcGain=1;gateGain=1;blocks=0;dropouts=0;streamStart=Date.now();nextTime=ctx.currentTime+.08;status('LIVE — microphone streaming to phone');$('listen').textContent='■ END LISTEN';$('listen').classList.add('active');$('record').disabled=false;$('mute').disabled=false;$('connection').textContent='LIVE CONNECTED';drawSpectrum();pump()}
  catch(e){status('Audio start failed: '+e.message)}
 }
 async function stopListen(){
@@ -264,6 +313,32 @@ void setup(){
  web.on("/status",HTTP_GET,handleStatus);
  web.on("/reboot",HTTP_POST,[]{web.send(200,"text/plain","rebooting");delay(100);ESP.restart();});
  web.begin();
+ audioServer.begin();
  Serial.println("SKB Audio Lab v1.1: http://192.168.4.1");
 }
-void loop(){web.handleClient();M5.update();delay(1);}
+void loop(){
+ web.handleClient();
+ M5.update();
+ if(!audioClient || !audioClient.connected()){
+  if(audioClient)audioClient.stop();
+  WiFiClient candidate=audioServer.available();
+  if(candidate){
+   candidate.setTimeout(100);
+   String request=candidate.readStringUntil('\n');
+   if(request.startsWith("GET /live ")){
+    while(candidate.available())candidate.read();
+    candidate.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n");
+    audioClient=candidate;
+    lastAudioBlock=millis();
+   }else{candidate.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");candidate.stop();}
+  }
+ }
+ if(audioClient && audioClient.connected() && millis()-lastAudioBlock>=AUDIO_INTERVAL_MS){
+  lastAudioBlock=millis();
+  if(!micReady)micReady=M5.Mic.begin();
+  if(micReady && M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE)){
+   if(audioClient.availableForWrite()>=BLOCK_SAMPLES*2)audioClient.write((const uint8_t*)pcm,BLOCK_SAMPLES*2);
+  }
+ }
+ delay(1);
+}
