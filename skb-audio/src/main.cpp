@@ -14,6 +14,15 @@ static uint32_t lastAudioBlock=0;
 static constexpr uint32_t AUDIO_INTERVAL_MS=32;
 static bool capturing = false;
 static bool micReady = false;
+static uint32_t micInitAttempts = 0;
+static bool ensureMic(){
+ if(micReady)return true;
+ ++micInitAttempts;
+ M5.Speaker.end();
+ delay(30);
+ micReady=M5.Mic.begin();
+ return micReady;
+}
 static const char *AP_NAME = "SKB-Audio";
 static const char *AP_PASSWORD = "SKBAudio2026!";
 
@@ -311,7 +320,7 @@ static void handleChunk(){
  if(capturing){web.send(503,"text/plain","busy");return;}
  capturing=true;
  M5.Speaker.end();
- if(!micReady)micReady=M5.Mic.begin();
+ if(!micReady)ensureMic();
  if(!micReady){
   capturing=false;web.send(500,"text/plain","mic init failed");return;
  }
@@ -378,7 +387,7 @@ void loop(){
  }
  if(audioClient && audioClient.connected() && millis()-lastAudioBlock>=AUDIO_INTERVAL_MS){
   lastAudioBlock=millis();
-  if(!micReady)micReady=M5.Mic.begin();
+  if(!micReady)ensureMic();
   if(micReady && M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE)){
    if(audioClient.availableForWrite()>=BLOCK_SAMPLES*2)audioClient.write((const uint8_t*)pcm,BLOCK_SAMPLES*2);
   }
