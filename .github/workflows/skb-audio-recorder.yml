@@ -1,0 +1,27 @@
+name: Build SKB Audio Recorder
+on:
+  push:
+    branches: [skb-audio-recorder]
+    paths:
+      - 'skb-audio/**'
+      - '.github/workflows/skb-audio-recorder.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build standalone audio firmware
+        run: pio run -d skb-audio -e skb_audio
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SKB-Audio-Recorder-firmware
+          path: |
+            skb-audio/.pio/build/skb_audio/firmware.bin
+            skb-audio/.pio/build/skb_audio/bootloader.bin
+            skb-audio/.pio/build/skb_audio/partitions.bin
