@@ -34,20 +34,21 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 <div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Full EQ processed</option></select></label></div>
 </div>
 <div class="panel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
-<div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select a frequency for Band A or B.</small></div>
+<div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select the nearest detected peak for Band A or B.</small></div>
 <div class="panel"><h3>SKB AUTOTUNE · TWO INDEPENDENT BANDS</h3>
 <div class="row"><button id="pickA" class="active">SELECT BAND A</button><button id="pickB">SELECT BAND B</button></div>
 <div id="bands"></div><div class="row"><button id="auto">AUTO TUNE SELECTED</button><button id="track">AUTO TRACK: OFF</button><button id="bypass">EQ BYPASS: OFF</button></div>
 <small>AutoTune centres a peaking EQ filter on the selected frequency. Auto Track follows the strongest detected peak; this can jump between sounds.</small>
 </div>
 <div class="panel"><h3>10-BAND GRAPHIC EQUALIZER</h3><div class="row"><button id="flat">FLAT</button><button id="voice">VOICE CLARITY</button><button id="hum">RUMBLE REDUCTION</button></div><div id="eq"></div></div>
+<div class="panel"><h3>STREAM DIAGNOSTICS</h3><p id="diagnostics">No stream started</p><button id="testWav">DOWNLOAD 2-SECOND TEST TONE WAV</button><small>The test tone is generated on your phone and checks WAV export, not the M5 microphone.</small></div>
 <div class="panel"><h3>STATUS</h3><p id="info">Wi-Fi AP: SKB-Audio · 192.168.4.1</p><button id="reboot">REBOOT DEVICE</button><small>Audio is sent only while Listen is active. WAV files are saved to the phone, not device flash. Maximum recording: 3 minutes.</small></div>
 </main><script>
 'use strict';
 const RATE=16000,N=512,$=id=>document.getElementById(id);
 let ctx=null,analyser=null,sourceGain=null,volumeNode=null,highpass=null,eqNodes=[],bandNodes=[],outputNode=null;
 let listening=false,muted=false,recording=false,recordStart=0,recordOriginal=[],nextTime=0,abort=null;
-let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0,lastTrack=0;
+let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0,lastTrack=0,blocks=0,dropouts=0,streamStart=0;
 const MAX_RECORD_SECONDS=180;
 const freqs=[80,160,315,630,1000,2000,3150,4000,6300,7900];
 const bands=[{hz:1200,gain:6,width:400,enabled:false},{hz:2400,gain:6,width:500,enabled:false}];
@@ -162,14 +163,14 @@ async function pump(){
    nextTime=Math.max(nextTime,ctx.currentTime+.045);
    if(nextTime-ctx.currentTime>.5)nextTime=ctx.currentTime+.05;
    src.start(nextTime);nextTime+=N/RATE;
-   if(recording){recordOriginal.push(samples.slice());if((Date.now()-recordStart)/1000>=MAX_RECORD_SECONDS){stopRecord();status('Recording limit reached — WAV saved')}}
+   blocks++;if(recording){recordOriginal.push(samples.slice());if((Date.now()-recordStart)/1000>=MAX_RECORD_SECONDS){stopRecord();status('Recording limit reached — WAV saved')}}
    failures=0;
-  }catch(e){if(!listening)break;failures++;status('Stream error: '+e.message);if(failures>5){await stopListen();break}await new Promise(r=>setTimeout(r,150))}
+  }catch(e){if(!listening)break;failures++;dropouts++;status('Stream error: '+e.message);if(failures>5){await stopListen();break}await new Promise(r=>setTimeout(r,150))}
  }
 }
 async function startListen(){
  if(listening)return;
- try{initAudio();await ctx.resume();listening=true;nextTime=ctx.currentTime+.08;status('LIVE — microphone streaming to phone');$('listen').textContent='■ END LISTEN';$('listen').classList.add('active');$('record').disabled=false;$('mute').disabled=false;$('connection').textContent='LIVE CONNECTED';drawSpectrum();pump()}
+ try{initAudio();await ctx.resume();listening=true;blocks=0;dropouts=0;streamStart=Date.now();nextTime=ctx.currentTime+.08;status('LIVE — microphone streaming to phone');$('listen').textContent='■ END LISTEN';$('listen').classList.add('active');$('record').disabled=false;$('mute').disabled=false;$('connection').textContent='LIVE CONNECTED';drawSpectrum();pump()}
  catch(e){status('Audio start failed: '+e.message)}
 }
 async function stopListen(){
@@ -184,7 +185,20 @@ $('stop').onclick=stopRecord;
 $('volume').oninput=()=>{$('volLabel').textContent=$('volume').value+'%';if(ctx)updateFilters()};
 $('gain').oninput=()=>{$('gainLabel').textContent=Number($('gain').value).toFixed(1)+'×';if(ctx)updateFilters()};
 $('noise').onchange=updateFilters;
-$('spectrum').addEventListener('pointerdown',e=>{const r=e.currentTarget.getBoundingClientRect();selectedHz=clamp(Math.round((e.clientX-r.left)/r.width*8000/10)*10,80,7900);$('selected').textContent=fmt(selectedHz)});
+$('spectrum').addEventListener('pointerdown',e=>{
+ const r=e.currentTarget.getBoundingClientRect(),target=clamp((e.clientX-r.left)/r.width*8000,80,7900);
+ let hz=target;
+ if(lastSpectrum){
+  const step=RATE/2048,centre=Math.round(target/step);
+  const radius=Math.max(4,Math.round(180/step));
+  let best=-1;
+  for(let i=Math.max(10,centre-radius);i<=Math.min(lastSpectrum.length-2,centre+radius);i++){
+   const v=lastSpectrum[i];if(v>best&&v>=lastSpectrum[i-1]&&v>=lastSpectrum[i+1]){best=v;hz=i*step}
+  }
+ }
+ selectedHz=clamp(Math.round(hz/10)*10,80,7900);
+ $('selected').textContent=fmt(selectedHz);
+});
 $('pickA').onclick=()=>pick(0);$('pickB').onclick=()=>pick(1);
 function pick(i){chosen=i;$('pickA').classList.toggle('active',i===0);$('pickB').classList.toggle('active',i===1);selectedHz=bands[i].hz;$('selected').textContent=fmt(selectedHz)}
 $('auto').onclick=()=>{bands[chosen].hz=selectedHz;bands[chosen].enabled=true;updateFilters();renderBands();status('AutoTune: Band '+(chosen?'B':'A')+' centred on '+fmt(selectedHz))};
@@ -197,7 +211,16 @@ $('flat').onclick=()=>preset(freqs.map(()=>0));
 $('voice').onclick=()=>preset([-6,-4,-2,0,2,4,3,1,-1,-3]);
 $('hum').onclick=()=>{$('noise').checked=true;preset([-12,-8,-4,-2,0,0,0,0,0,0])};
 $('reboot').onclick=async()=>{if(confirm('Reboot the M5StickC Plus2?')){await stopListen();fetch('/reboot',{method:'POST'}).catch(()=>{});status('Reboot requested')}};
-setInterval(()=>{$('clock').textContent=recording?new Date(Date.now()-recordStart).toISOString().slice(14,19):'00:00'},250);
+setInterval(()=>{
+ $('clock').textContent=recording?new Date(Date.now()-recordStart).toISOString().slice(14,19):'00:00';
+ if(listening){const seconds=Math.max(1,(Date.now()-streamStart)/1000);
+ $('diagnostics').textContent='Audio blocks: '+blocks+' · errors: '+dropouts+' · capture throughput: '+(blocks*N/seconds/RATE*100).toFixed(0)+'% of real time · recorded: '+Math.round(recordOriginal.length*N/RATE)+'s'}
+},500);
+$('testWav').onclick=()=>{
+ const tone=new Float32Array(RATE*2);
+ for(let i=0;i<tone.length;i++)tone[i]=Math.sin(2*Math.PI*440*i/RATE)*.2;
+ download([tone]);
+};
 setInterval(async()=>{try{const s=await (await fetch('/status')).json();$('battery').textContent='BATTERY '+s.battery+'%';$('info').textContent='AP: '+s.ssid+' · IP: '+s.ip+' · Clients: '+s.clients}catch(e){}},4000);
 renderBands();
 </script></body></html>
