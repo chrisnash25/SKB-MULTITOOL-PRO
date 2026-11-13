@@ -14,7 +14,25 @@ static uint32_t lastAudioBlock=0;
 static constexpr uint32_t AUDIO_INTERVAL_MS=32;
 static bool capturing = false;
 static bool micReady = false;
+static bool ensureMic();
 static uint32_t micInitAttempts = 0;
+static uint32_t micRecordSuccess=0, micRecordFailure=0, micRecordTimeout=0, micLastCaptureMs=0;
+static bool micCaptureBusy=false;
+static bool captureAudio(){
+ if(micCaptureBusy)return false;
+ micCaptureBusy=true;
+ if(!ensureMic()){++micRecordFailure;micCaptureBusy=false;return false;}
+ uint32_t started=millis();
+ bool queued=M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE);
+ if(!queued){++micRecordFailure;micCaptureBusy=false;return false;}
+ while(M5.Mic.isRecording() && millis()-started<1000)delay(1);
+ micLastCaptureMs=millis()-started;
+ if(M5.Mic.isRecording()){
+  ++micRecordTimeout;++micRecordFailure;micReady=false;
+  M5.Mic.end();micCaptureBusy=false;return false;
+ }
+ ++micRecordSuccess;micCaptureBusy=false;return true;
+}
 static bool ensureMic(){
  if(micReady && M5.Mic.isEnabled())return true;
  ++micInitAttempts;
@@ -331,13 +349,11 @@ renderBands();
 static void handleChunk(){
  if(capturing){web.send(503,"text/plain","busy");return;}
  capturing=true;
- M5.Speaker.end();
- if(!micReady)ensureMic();
- if(!micReady){
+ if(!ensureMic()){
   capturing=false;web.send(500,"text/plain","mic init failed");return;
  }
- bool ok=M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE);
- if(!ok){micReady=false;M5.Mic.end();capturing=false;web.send(500,"text/plain","mic capture failed");return;}
+ bool ok=captureAudio();
+ if(!ok){capturing=false;web.send(500,"text/plain","mic capture failed");return;}
  web.setContentLength(BLOCK_SAMPLES*2);
  web.sendHeader("Cache-Control","no-store");
  web.send(200,"application/octet-stream","");
@@ -382,6 +398,11 @@ void setup(){
     +",\"mic_enabled\":"+(M5.Mic.isEnabled()?"true":"false")
     +",\"attempts\":"+String(micInitAttempts)
     +",\"board\":"+String((int)M5.getBoard())
+    +",\"capture_success\":"+String(micRecordSuccess)
+    +",\"capture_failures\":"+String(micRecordFailure)
+    +",\"capture_timeouts\":"+String(micRecordTimeout)
+    +",\"last_capture_ms\":"+String(micLastCaptureMs)
+    +",\"capture_busy\":"+(micCaptureBusy?"true":"false")
     +",\"clock_pin\":0,\"data_pin\":34}";
   web.send(200,"application/json",json);
  });
@@ -411,7 +432,7 @@ void loop(){
  if(audioClient && audioClient.connected() && millis()-lastAudioBlock>=AUDIO_INTERVAL_MS){
   lastAudioBlock=millis();
   if(!micReady)ensureMic();
-  if(micReady && M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE)){
+  if(captureAudio()){
    if(audioClient.availableForWrite()>=BLOCK_SAMPLES*2)audioClient.write((const uint8_t*)pcm,BLOCK_SAMPLES*2);
   }
  }
