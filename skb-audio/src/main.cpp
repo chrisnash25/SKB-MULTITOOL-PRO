@@ -16,11 +16,23 @@ static bool capturing = false;
 static bool micReady = false;
 static uint32_t micInitAttempts = 0;
 static bool ensureMic(){
- if(micReady)return true;
+ if(micReady && M5.Mic.isEnabled())return true;
  ++micInitAttempts;
  M5.Speaker.end();
- delay(30);
- micReady=M5.Mic.begin();
+ M5.Mic.end();
+ delay(40);
+ // M5StickC Plus2 SPM1423: PDM clock GPIO0, data GPIO34.
+ auto micCfg = M5.Mic.config();
+ micCfg.pin_bck = 0;
+ micCfg.pin_data_in = 34;
+ micCfg.pin_ws = -1;
+ micCfg.pin_mck = -1;
+ micCfg.sample_rate = SAMPLE_RATE;
+ micCfg.use_adc = false;
+ M5.Mic.config(micCfg);
+ micReady = M5.Mic.begin();
+ Serial.printf("SKB MIC init attempt=%lu success=%d enabled=%d board=%d\\n",
+               (unsigned long)micInitAttempts, micReady, M5.Mic.isEnabled(), (int)M5.getBoard());
  return micReady;
 }
 static const char *AP_NAME = "SKB-Audio";
@@ -347,6 +359,8 @@ void setup(){
  auto cfg=M5.config();
  cfg.internal_mic=true;cfg.internal_spk=false;
  M5.begin(cfg);
+ M5.Speaker.end();
+ ensureMic();
  WiFi.mode(WIFI_AP);
  WiFi.softAP(AP_NAME,AP_PASSWORD);
  web.on("/",HTTP_GET,[]{web.send_P(200,"text/html",PAGE);});
@@ -362,6 +376,15 @@ void setup(){
   }
  });
  web.on("/chunk",HTTP_GET,handleChunk);
+ web.on("/mic-diagnostic",HTTP_GET,[]{
+  bool ready=ensureMic();
+  String json=String("{\\\"mic_initialized\\\":")+(ready?"true":"false")
+    +",\\\"mic_enabled\\\":"+(M5.Mic.isEnabled()?"true":"false")
+    +",\\\"attempts\\\":"+String(micInitAttempts)
+    +",\\\"board\\\":"+String((int)M5.getBoard())
+    +",\\\"clock_pin\\\":0,\\\"data_pin\\\":34}";
+  web.send(200,"application/json",json);
+ });
  web.on("/status",HTTP_GET,handleStatus);
  web.on("/reboot",HTTP_POST,[]{web.send(200,"text/plain","rebooting");delay(100);ESP.restart();});
  web.begin();
