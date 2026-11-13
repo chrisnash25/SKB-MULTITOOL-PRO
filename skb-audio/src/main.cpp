@@ -8,6 +8,7 @@ static constexpr size_t BLOCK_SAMPLES = 512;
 static int16_t pcm[BLOCK_SAMPLES];
 static WebServer web(80);
 static bool capturing = false;
+static bool micReady = false;
 static const char *AP_NAME = "SKB-Audio";
 static const char *AP_PASSWORD = "SKBAudio2026!";
 
@@ -30,7 +31,7 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 <div class="row"><button id="listen">▶ LIVE LISTEN</button><button id="mute" disabled>MUTE</button><button id="record" disabled>● RECORD</button><button id="stop" disabled>■ STOP & SAVE</button></div>
 <label>Playback volume <output id="volLabel">80%</output></label><input id="volume" type="range" min="0" max="100" value="80">
 <label>Input gain (digital) <output id="gainLabel">1.0×</output></label><input id="gain" type="range" min="1" max="6" step=".1" value="1">
-<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Digital-gain adjusted (not full EQ)</option></select></label></div>
+<div class="row"><label><input type="checkbox" id="noise"> Low-cut / rumble reduction</label><label>Save <select id="saveMode"><option value="original">Original PCM</option><option value="processed">Full EQ processed</option></select></label></div>
 </div>
 <div class="panel"><h3>LIVE WAVEFORM</h3><canvas id="wave" width="680" height="140"></canvas><small>Real microphone samples · 16 kHz / 16-bit mono</small></div>
 <div class="panel"><h3>LIVE SPECTRUM · TAP A PEAK</h3><canvas id="spectrum" width="680" height="140"></canvas><div class="row"><span>Peak: <b id="peak">—</b></span><span>Selected: <b id="selected">1200 Hz</b></span></div><small>Frequency axis 0–8 kHz. Tap the spectrum to select a frequency for Band A or B.</small></div>
@@ -40,13 +41,14 @@ small,.hint{color:#aeb3b7}output{float:right}h3{margin:6px 0 10px}select{backgro
 <small>AutoTune centres a peaking EQ filter on the selected frequency. Auto Track follows the strongest detected peak; this can jump between sounds.</small>
 </div>
 <div class="panel"><h3>10-BAND GRAPHIC EQUALIZER</h3><div class="row"><button id="flat">FLAT</button><button id="voice">VOICE CLARITY</button><button id="hum">RUMBLE REDUCTION</button></div><div id="eq"></div></div>
-<div class="panel"><h3>STATUS</h3><p id="info">Wi-Fi AP: SKB-Audio · 192.168.4.1</p><button id="reboot">REBOOT DEVICE</button><small>Audio is sent only while Listen is active. WAV files are saved to the phone, not device flash.</small></div>
+<div class="panel"><h3>STATUS</h3><p id="info">Wi-Fi AP: SKB-Audio · 192.168.4.1</p><button id="reboot">REBOOT DEVICE</button><small>Audio is sent only while Listen is active. WAV files are saved to the phone, not device flash. Maximum recording: 3 minutes.</small></div>
 </main><script>
 'use strict';
 const RATE=16000,N=512,$=id=>document.getElementById(id);
 let ctx=null,analyser=null,sourceGain=null,volumeNode=null,highpass=null,eqNodes=[],bandNodes=[],outputNode=null;
-let listening=false,muted=false,recording=false,recordStart=0,recordOriginal=[],recordProcessed=[],nextTime=0,abort=null;
-let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0;
+let listening=false,muted=false,recording=false,recordStart=0,recordOriginal=[],nextTime=0,abort=null;
+let chosen=0,selectedHz=1200,track=false,bypass=false,latestPeak=0,lastSpectrum=null,frame=0,failures=0,lastTrack=0;
+const MAX_RECORD_SECONDS=180;
 const freqs=[80,160,315,630,1000,2000,3150,4000,6300,7900];
 const bands=[{hz:1200,gain:6,width:400,enabled:false},{hz:2400,gain:6,width:500,enabled:false}];
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -87,7 +89,7 @@ function initAudio(){
  eqNodes=freqs.map(f=>{let n=ctx.createBiquadFilter();n.type='peaking';n.frequency.value=f;n.Q.value=1.2;return n});
  bandNodes=bands.map(b=>{let n=ctx.createBiquadFilter();n.type='peaking';n.frequency.value=b.hz;return n});
  volumeNode=ctx.createGain();analyser=ctx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.72;
- let chain=[sourceGain,highpass,...eqNodes,...bandNodes,analyser,volumeNode];
+ let chain=[sourceGain,analyser,highpass,...eqNodes,...bandNodes,volumeNode];
  for(let i=0;i<chain.length-1;i++)chain[i].connect(chain[i+1]);
  volumeNode.connect(ctx.destination);outputNode=sourceGain;updateFilters();
 }
@@ -102,7 +104,7 @@ function drawSpectrum(){
  let best=0,peak=0;
  for(let x=1;x<c.width;x+=2){const hz=x/c.width*8000,idx=clamp(Math.round(hz/(RATE/2)*bins.length),0,bins.length-1),v=bins[idx];if(hz>70&&v>best){best=v;peak=hz}g.fillStyle='#9ba3aa';g.fillRect(x,c.height-v/255*c.height,2,v/255*c.height)}
  latestPeak=peak;$('peak').textContent=fmt(peak);
- if(track&&peak>70){bands[chosen].hz=Math.round(peak/10)*10;bands[chosen].enabled=true;selectedHz=bands[chosen].hz;updateFilters();$('selected').textContent=fmt(selectedHz)}
+ if(track&&peak>70&&performance.now()-lastTrack>750){lastTrack=performance.now();bands[chosen].hz=Math.round(peak/10)*10;bands[chosen].enabled=true;selectedHz=bands[chosen].hz;updateFilters();$('selected').textContent=fmt(selectedHz)}
  const x=selectedHz/8000*c.width;g.strokeStyle='#fff';g.beginPath();g.moveTo(x,0);g.lineTo(x,c.height);g.stroke();
  frame=requestAnimationFrame(drawSpectrum);
 }
@@ -119,9 +121,32 @@ function download(chunks){
  const url=URL.createObjectURL(pcmToWav(chunks)),a=document.createElement('a');a.href=url;a.download='SKB_'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
  status('WAV saved to phone Downloads');
 }
-function stopRecord(){
+async function renderProcessed(chunks){
+ const length=chunks.reduce((n,a)=>n+a.length,0);
+ const offline=new OfflineAudioContext(1,length,RATE);
+ const audio=offline.createBuffer(1,length,RATE);
+ const data=audio.getChannelData(0);let offset=0;
+ for(const part of chunks){data.set(part,offset);offset+=part.length}
+ const src=offline.createBufferSource();src.buffer=audio;
+ const gain=offline.createGain();gain.gain.value=Number($('gain').value);
+ src.connect(gain);let tail=gain;
+ if($('noise').checked){const hp=offline.createBiquadFilter();hp.type='highpass';hp.frequency.value=100;tail.connect(hp);tail=hp}
+ if(!bypass){
+  for(let i=0;i<freqs.length;i++){const v=Number(document.querySelectorAll('[data-eq]')[i].value);if(!v)continue;const n=offline.createBiquadFilter();n.type='peaking';n.frequency.value=freqs[i];n.Q.value=1.2;n.gain.value=v;tail.connect(n);tail=n}
+  for(const b of bands){if(!b.enabled)continue;const n=offline.createBiquadFilter();n.type='peaking';n.frequency.value=b.hz;n.Q.value=clamp(b.hz/b.width,.15,30);n.gain.value=b.gain;tail.connect(n);tail=n}
+ }
+ tail.connect(offline.destination);src.start();
+ const result=await offline.startRendering();
+ return [result.getChannelData(0).slice()];
+}
+async function stopRecord(){
  if(!recording)return;recording=false;$('record').disabled=false;$('stop').disabled=true;
- const chunks=$('saveMode').value==='processed'?recordProcessed:recordOriginal;download(chunks);recordOriginal=[];recordProcessed=[];
+ const chunks=recordOriginal;recordOriginal=[];
+ if(!chunks.length){status('No audio captured');return}
+ try{
+  status('Preparing WAV for download...');
+  download($('saveMode').value==='processed'?await renderProcessed(chunks):chunks);
+ }catch(e){status('Processed export failed: '+e.message+'; saving original');download(chunks)}
 }
 async function pump(){
  while(listening){
@@ -137,7 +162,7 @@ async function pump(){
    nextTime=Math.max(nextTime,ctx.currentTime+.045);
    if(nextTime-ctx.currentTime>.5)nextTime=ctx.currentTime+.05;
    src.start(nextTime);nextTime+=N/RATE;
-   if(recording){recordOriginal.push(samples.slice());const processed=samples.map(v=>clamp(v*Number($('gain').value),-1,1));recordProcessed.push(processed)}
+   if(recording){recordOriginal.push(samples.slice());if((Date.now()-recordStart)/1000>=MAX_RECORD_SECONDS){stopRecord();status('Recording limit reached — WAV saved')}}
    failures=0;
   }catch(e){if(!listening)break;failures++;status('Stream error: '+e.message);if(failures>5){await stopListen();break}await new Promise(r=>setTimeout(r,150))}
  }
@@ -148,13 +173,13 @@ async function startListen(){
  catch(e){status('Audio start failed: '+e.message)}
 }
 async function stopListen(){
- if(!listening)return;listening=false;if(abort)abort.abort();if(recording)stopRecord();
+ if(!listening)return;listening=false;if(abort)abort.abort();if(recording)await stopRecord();
  cancelAnimationFrame(frame);$('listen').textContent='▶ LIVE LISTEN';$('listen').classList.remove('active');$('record').disabled=true;$('mute').disabled=true;$('connection').textContent='DISCONNECTED';status('Live audio stopped');
  if(ctx){await ctx.close();ctx=null;analyser=null}
 }
 $('listen').onclick=()=>listening?stopListen():startListen();
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'UNMUTE':'MUTE';updateFilters()};
-$('record').onclick=()=>{recordOriginal=[];recordProcessed=[];recordStart=Date.now();recording=true;$('record').disabled=true;$('stop').disabled=false;status('RECORDING — visible recording active')};
+$('record').onclick=()=>{recordOriginal=[];recordStart=Date.now();recording=true;$('record').disabled=true;$('stop').disabled=false;status('RECORDING — visible recording active')};
 $('stop').onclick=stopRecord;
 $('volume').oninput=()=>{$('volLabel').textContent=$('volume').value+'%';if(ctx)updateFilters()};
 $('gain').oninput=()=>{$('gainLabel').textContent=Number($('gain').value).toFixed(1)+'×';if(ctx)updateFilters()};
@@ -167,7 +192,7 @@ $('track').onclick=()=>{track=!track;$('track').textContent='AUTO TRACK: '+(trac
 $('bypass').onclick=()=>{bypass=!bypass;$('bypass').textContent='EQ BYPASS: '+(bypass?'ON':'OFF');updateFilters()};
 const eqControls=[];
 for(let i=0;i<freqs.length;i++){const f=freqs[i],wrap=makeSlider(f+' Hz',-12,12,1,0,()=>updateFilters());wrap.querySelector('input').dataset.eq='1';$('eq').append(wrap);eqControls.push(wrap.querySelector('input'))}
-function preset(values){eqControls.forEach((e,i)=>{e.value=values[i];e.previousSibling.querySelector('output').textContent=values[i]});updateFilters()}
+function preset(values){eqControls.forEach((e,i)=>{e.value=values[i];e.parentElement.querySelector('output').textContent=values[i]});updateFilters()}
 $('flat').onclick=()=>preset(freqs.map(()=>0));
 $('voice').onclick=()=>preset([-6,-4,-2,0,2,4,3,1,-1,-3]);
 $('hum').onclick=()=>{$('noise').checked=true;preset([-12,-8,-4,-2,0,0,0,0,0,0])};
@@ -182,15 +207,22 @@ static void handleChunk(){
  if(capturing){web.send(503,"text/plain","busy");return;}
  capturing=true;
  M5.Speaker.end();
- if(!M5.Mic.begin()){
+ if(!micReady)micReady=M5.Mic.begin();
+ if(!micReady){
   capturing=false;web.send(500,"text/plain","mic init failed");return;
  }
  bool ok=M5.Mic.record(pcm,BLOCK_SAMPLES,SAMPLE_RATE);
- if(!ok){capturing=false;web.send(500,"text/plain","mic capture failed");return;}
+ if(!ok){micReady=false;M5.Mic.end();capturing=false;web.send(500,"text/plain","mic capture failed");return;}
  web.setContentLength(BLOCK_SAMPLES*2);
+ web.sendHeader("Cache-Control","no-store");
  web.send(200,"application/octet-stream","");
  WiFiClient c=web.client();
- c.write((const uint8_t*)pcm,BLOCK_SAMPLES*2);
+ size_t sent=0;
+ while(sent<BLOCK_SAMPLES*2 && c.connected()){
+  size_t n=c.write(((const uint8_t*)pcm)+sent,BLOCK_SAMPLES*2-sent);
+  if(!n)break;
+  sent+=n;
+ }
  capturing=false;
 }
 static void handleStatus(){
