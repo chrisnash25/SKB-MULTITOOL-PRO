@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <M5Unified.h>
+#include "skb_logo.h"
 
 static constexpr uint32_t SAMPLE_RATE = 16000;
 static constexpr size_t BLOCK_SAMPLES = 512;
@@ -55,7 +56,7 @@ canvas{height:170px;background:#050607;border:2px solid #777;border-radius:12px;
 #navLinks button{font-size:clamp(10px,2.4vw,14px);padding:5px}
 #qualityLabel{font-size:13px;color:#b7bcc0;text-align:right}
 </style></head><body><main>
-<div class="logo">SKB</div><div class="sub">SECURE HARDWARE SOLUTIONS</div><div class="plate">SKB AUDIO RECORDER</div>
+<img id="realLogo" src="/skb-logo.jpg" alt="SKB Secure Hardware Solutions" style="display:none;width:100%;height:auto;border-radius:8px"><div id="textLogo"><div class="logo">SKB</div><div class="sub">SECURE HARDWARE SOLUTIONS</div></div><div class="plate">SKB AUDIO RECORDER</div>
 <div class="panel"><div id="dashboardStatus" class="row"><span class="pill" id="connection">DISCONNECTED</span><span class="pill" id="clock">00:00</span><span class="pill" id="battery">BATTERY —</span></div>
 <p id="status">Tap LIVE LISTEN to activate microphone streaming. Use with permission.</p>
 <div id="heroControls"><button id="listen">LISTEN</button><button id="record" disabled>RECORD</button><button id="stop" disabled>STOP</button><button id="save" disabled>SAVE WAV</button></div><div id="recordIndicator"><span id="recordText">READY</span><span id="recordTime">00:00</span></div><button id="mute" disabled>MUTE</button>
@@ -301,6 +302,7 @@ $('testWav').onclick=()=>{
  download([tone]);
 };
 setInterval(async()=>{try{const s=await (await fetch('/status')).json();$('battery').textContent='BATTERY '+s.battery+'%';$('info').textContent='AP: '+s.ssid+' · IP: '+s.ip+' · Clients: '+s.clients}catch(e){}},4000);
+fetch('/logo-status').then(r=>r.json()).then(s=>{if(s.available){$('realLogo').style.display='block';$('textLogo').style.display='none'}}).catch(()=>{});
 renderBands();
 </script></body></html>
 )SKBHTML";
@@ -339,6 +341,17 @@ void setup(){
  WiFi.mode(WIFI_AP);
  WiFi.softAP(AP_NAME,AP_PASSWORD);
  web.on("/",HTTP_GET,[]{web.send_P(200,"text/html",PAGE);});
+ web.on("/logo-status",HTTP_GET,[]{web.send(200,"application/json",SKB_LOGO_LENGTH>0?"{\\"available\\":true}":"{\\"available\\":false}");});
+ web.on("/skb-logo.jpg",HTTP_GET,[]{
+  if(!SKB_LOGO_LENGTH){web.send(404,"text/plain","logo not embedded");return;}
+  web.setContentLength(SKB_LOGO_LENGTH);
+  web.send(200,"image/jpeg","");
+  WiFiClient client=web.client();
+  for(size_t i=0;i<SKB_LOGO_LENGTH;i+=512){
+   uint8_t chunk[512];size_t n=SKB_LOGO_LENGTH-i;if(n>sizeof(chunk))n=sizeof(chunk);
+   memcpy_P(chunk,SKB_LOGO_DATA+i,n);client.write(chunk,n);
+  }
+ });
  web.on("/chunk",HTTP_GET,handleChunk);
  web.on("/status",HTTP_GET,handleStatus);
  web.on("/reboot",HTTP_POST,[]{web.send(200,"text/plain","rebooting");delay(100);ESP.restart();});
