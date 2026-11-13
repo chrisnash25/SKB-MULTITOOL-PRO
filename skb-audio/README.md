@@ -56,3 +56,12 @@ The UI reports received PCM blocks, HTTP stream errors, estimated capture throug
 - The original uploaded SKB logo is not embedded; the UI currently renders SKB as styled text.
 - Auto Track can follow unwanted noise, especially with low input levels.
 - No automatic gain control, advanced noise suppression or adjustable sample rate is implemented.
+
+## Experimental streaming and adaptive audio update
+- Persistent raw PCM HTTP stream on TCP port 81 (`http://192.168.4.1:81/live`) replaces repeated short polling in the browser. Port 80 still serves the UI and status.
+- Optional adaptive noise gate uses measured RMS noise floor; this is **not** neural or spectral noise suppression. It can cut quiet speech, and needs real-device tuning.
+- Optional automatic gain control uses a smoothed RMS-based gain estimate; it may raise background noise and can clip.
+- Low-cut filtering and the existing ten-band EQ remain available.
+- Browser recording in Original mode stores unprocessed PCM. Processed WAV export applies the low-cut and EQ but currently **does not include** the adaptive gate or automatic gain changes used during live playback.
+- The persistent stream and new audio conditioning have not been verified on hardware; build success alone does not prove real-time playback quality.
+- The original SKB image asset was not yet embedded; the UI still displays CSS lettering. An exact original image must be recovered and converted to a firmware-friendly embedded asset before claiming this is done.
