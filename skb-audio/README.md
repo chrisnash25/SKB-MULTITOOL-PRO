@@ -8,7 +8,7 @@ Standalone M5StickC Plus2 microphone-to-phone audio lab. This project lives in `
 - Live listen using repeated PCM HTTP blocks, live waveform and browser Web Audio spectrum (0–8 kHz)
 - Tap the spectrum to choose a centre frequency; independently adjustable Band A and B peaking EQ (frequency, gain, bandwidth)
 - Auto Tune selected frequency; Auto Track strongest peak; 10-band EQ, presets, bypass, low-cut, playback volume, digital input gain
-- Visible record and stop/save controls; WAV downloads to phone; raw PCM or digital-gain-adjusted capture
+- Visible record and stop/save controls; WAV downloads to phone; raw PCM or browser-rendered full-EQ capture
 - Battery status and device reboot
 
 ## Build
@@ -17,9 +17,9 @@ The workflow builds with PlatformIO and uploads firmware artifacts if compilatio
 
 ## Important limitations
 - The source was committed, but this revision has **not yet been confirmed to compile or run on hardware**.
-- The browser audio path uses repeated HTTP fetches. Audio gaps and latency are possible; continuous real-time streaming is not yet proven.
+- Recording is limited to 3 minutes to reduce memory pressure. The browser audio path uses repeated HTTP fetches. Audio gaps and latency are possible; continuous real-time streaming is not yet proven.
 - Spectrum analysis depends on browser playback and may show silence while muted.
-- The processed recording choice applies digital input gain, **not the full 10-band EQ or dual-band filter chain**. Filtered audio export still requires implementation.
+- Processed recording export uses browser OfflineAudioContext to render the gain, low-cut, 10-band EQ and both AutoTune bands at the settings active when recording stops. It may take time to render.
 - Auto Track follows the strongest spectral peak, which may be noise, and can jump rapidly.
 - The waveform is sourced from microphone PCM. The spectrum comes from the browser analyser.
 - The SKB lettering is CSS text, not the original uploaded logo image.
